@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>📂 Разделы сметы: {{ budget.name }}</h2>
+
+<form method="POST" action="{{ url_for('add_section') }}" style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+    <input type="hidden" name="budget_id" value="{{ budget.id }}">
+    <div style="display: grid; grid-template-columns: 1fr 2fr 2fr 1fr 1fr; gap: 10px;">
+        <input type="text" name="code" placeholder="Код (01)" required>
+        <input type="text" name="name" placeholder="Название раздела" required>
+        <input type="text" name="description" placeholder="Описание">
+        <input type="number" name="sort_order" placeholder="Порядок" value="0">
+        <button type="submit">Добавить</button>
+    </div>
+</form>
+
+<table>
+    <thead>
+        <tr><th>Код</th><th>Название</th><th>Описание</th><th>Порядок</th><th>Статей</th><th>Действия</th></tr>
+    </thead>
+    <tbody>
+        {% for s in sections %}
+        <tr>
+            <td>{{ s.code }}</td>
+            <td>{{ s.name }}</td>
+            <td>{{ s.description or '-' }}</td>
+            <td>{{ s.sort_order }}</td>
+            <td>{{ s.articles|length }}</td>
+            <td>
+                <a href="{{ url_for('section_articles', section_id=s.id) }}">Статьи</a>
+                | <a href="#" onclick="editSection({{ s.id }}, '{{ s.code }}', '{{ s.name }}', '{{ s.description or '' }}', {{ s.sort_order }})">Ред.</a>
+                | <a href="{{ url_for('delete_section', section_id=s.id) }}" onclick="return confirm('Удалить раздел?')">Удалить</a>
+             </td>
+         </tr>
+        {% else %}
+        <tr><td colspan="6">Нет разделов</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div style="margin-top: 20px;">
+    <a href="{{ url_for('budgets') }}" class="button">← Назад к сметам</a>
+</div>
+
+<script>
+function editSection(id, code, name, description, sortOrder) {
+    const newCode = prompt('Код раздела:', code);
+    if (newCode === null) return;
+    const newName = prompt('Название раздела:', name);
+    if (newName === null) return;
+    const newDesc = prompt('Описание:', description);
+    const newOrder = prompt('Порядок:', sortOrder);
+    
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `/edit_section/${id}`;
+    form.innerHTML = `
+        <input type="hidden" name="code" value="${newCode}">
+        <input type="hidden" name="name" value="${newName}">
+        <input type="hidden" name="description" value="${newDesc || ''}">
+        <input type="hidden" name="sort_order" value="${newOrder || 0}">
+    `;
+    document.body.appendChild(form);
+    form.submit();
+}
+</script>
+{% endblock %}

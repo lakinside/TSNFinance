@@ -1,0 +1,8 @@
+Flask
+Flask-SQLAlchemy
+pandas
+openpyxl
+reportlab
+PyPDF2
+Werkzeug
+python-dotenv

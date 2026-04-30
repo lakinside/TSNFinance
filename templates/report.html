@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>📊 Формирование отчета</h2>
+
+<form method="POST" action="{{ url_for('generate_report') }}" style="margin: 20px 0;">
+    <div class="form-group">
+        <label>Период с</label>
+        <input type="date" name="start_date">
+    </div>
+    
+    <div class="form-group">
+        <label>Период по</label>
+        <input type="date" name="end_date">
+    </div>
+    
+    <div class="form-group">
+        <label>Статьи сметы</label>
+        <div style="border: 1px solid #ddd; padding: 10px; border-radius: 5px; max-height: 200px; overflow-y: auto;">
+            {% for article in articles %}
+            <label style="display: block; margin: 5px 0;">
+                <input type="checkbox" name="article_ids" value="{{ article.id }}">
+                {{ article.code }} - {{ article.name }}
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <button type="submit">Сформировать отчет (PDF)</button>
+</form>
+
+<div style="margin-top: 30px; padding: 20px; background: #e7f3ff; border-radius: 10px;">
+    <h3>ℹ️ Инструкция</h3>
+    <ol style="margin-left: 20px; margin-top: 10px;">
+        <li>Выберите период для отчета</li>
+        <li>Выберите нужные статьи сметы (можно несколько)</li>
+        <li>Нажмите "Сформировать отчет"</li>
+        <li>В отчет войдут: таблица с операциями и все прикрепленные PDF-файлы</li>
+    </ol>
+</div>
+{% endblock %}

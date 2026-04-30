@@ -1,0 +1,2957 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    /* Общие стили */
+    body {
+        overflow-x: auto;
+    }
+
+    .container {
+        max-width: 100%;
+        margin: 0;
+        padding: 20px;
+    }
+
+    .content {
+        max-width: 100%;
+        overflow-x: auto;
+    }
+
+    .filters-bar {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        display: flex;
+        gap: 15px;
+        flex-wrap: wrap;
+        align-items: flex-end;
+    }
+    .filter-group {
+        flex: 1;
+        min-width: 150px;
+    }
+    .filter-group label {
+        font-size: 12px;
+        color: #666;
+        margin-bottom: 5px;
+        display: block;
+    }
+    .filter-group input, .filter-group select {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+    }
+
+    /* Таблица на всю ширину */
+    .operations-table {
+        width: 100%;
+        overflow-x: auto;
+        margin: 0 -20px;
+        padding: 0 20px;
+    }
+
+    .operations-table table {
+        width: 100%;
+        min-width: 1200px;
+        border-collapse: collapse;
+        font-size: 13px;
+        table-layout: fixed;
+    }
+
+    .operations-table th {
+        background: #667eea;
+        color: white;
+        padding: 12px 8px;
+        text-align: left;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        white-space: nowrap;
+    }
+
+    .operations-table td {
+        padding: 10px 8px;
+        border-bottom: 1px solid #eee;
+        vertical-align: top;
+        word-wrap: break-word;
+        word-break: break-word;
+        white-space: normal;
+    }
+
+    /* Фиксированная ширина для определенных колонок */
+    .operations-table th:nth-child(1), .operations-table td:nth-child(1) { width: 5%; }  /* Действие */
+    .operations-table th:nth-child(2), .operations-table td:nth-child(2) { width: 5%; }  /* Дата */
+    .operations-table th:nth-child(3), .operations-table td:nth-child(3) { width: 5%; } /* Сумма */
+    .operations-table th:nth-child(4), .operations-table td:nth-child(4) { width: 5%; }  /* Тип */
+    .operations-table th:nth-child(4), .operations-table td:nth-child(4) { width: 5%; }  /* Тип операции*/
+    .operations-table th:nth-child(5), .operations-table td:nth-child(5) { width: 5%; } /* Контрагент */
+    .operations-table th:nth-child(6), .operations-table td:nth-child(6) { width: 7%; } /* Назначение */
+    .operations-table th:nth-child(7), .operations-table td:nth-child(7) { width: 10%; } /* Смета */
+    .operations-table th:nth-child(8), .operations-table td:nth-child(8) { width: 20%; } /* Раздел */
+    .operations-table th:nth-child(9), .operations-table td:nth-child(9) { width: 7%; } /* Статья */
+    .operations-table th:nth-child(10), .operations-table td:nth-child(10) { width: 15%; } /* Док. */
+    .operations-table th:nth-child(11), .operations-table td:nth-child(11) { width: 15%; } /* Док. */
+    .operations-table th:nth-child(12), .operations-table td:nth-child(12) { width: 3%; } /* Док. */
+
+    .operations-table tr:hover {
+        background: #f5f5f5;
+    }
+
+    .expense {
+        color: #dc3545;
+        font-weight: 500;
+    }
+    .income {
+        color: #28a745;
+        font-weight: 500;
+    }
+
+    .select-inline {
+        padding: 6px;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+        font-size: 12px;
+        width: 100%;
+        min-width: 40px;
+        background: white;
+    }
+    .select-inline:focus {
+        outline: none;
+        border-color: #667eea;
+    }
+    .select-inline.saved {
+        background: #d4edda;
+        border-color: #28a745;
+        transition: background 0.3s;
+    }
+
+    .loading {
+        text-align: center;
+        padding: 40px;
+        color: #666;
+    }
+
+    .stats-bar {
+        background: #e7f3ff;
+        padding: 10px 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .refresh-btn {
+        background: #28a745;
+        padding: 5px 15px;
+        font-size: 12px;
+    }
+
+    .btn-split {
+        background: #ffc107;
+        color: #333;
+        border: none;
+        padding: 4px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+    .btn-split:hover {
+        background: #e0a800;
+    }
+    .btn-split.active {
+        background: #28a745;
+        color: white;
+    }
+
+    .split-row {
+        background: #f0f8ff;
+        border-left: 3px solid #667eea;
+    }
+    .split-row td {
+        padding: 8px;
+        vertical-align: middle;
+    }
+    .split-indent {
+        padding-left: 30px !important;
+    }
+
+    .split-summary {
+        font-size: 12px;
+        color: #666;
+        margin-top: 5px;
+    }
+    .split-remaining {
+        color: #28a745;
+        font-weight: bold;
+    }
+    .split-over {
+        color: #dc3545;
+        font-weight: bold;
+    }
+
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+    }
+    .modal-content {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        max-width: 500px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+    }
+    .split-item {
+        border-bottom: 1px solid #eee;
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+    .split-amount-input {
+        width: 120px;
+        padding: 5px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    .article-select {
+        min-width: 180px;
+        padding: 5px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    .btn-danger {
+        background: #dc3545;
+        color: white;
+        border: none;
+        padding: 2px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .btn-danger:hover {
+        background: #c82333;
+    }
+    .btn-success {
+        background: #28a745;
+        color: white;
+        border: none;
+        padding: 5px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .split-badge {
+        background: #28a745;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        display: inline-block;
+    }
+
+    /* Стили для ячеек с длинным текстом */
+    .cell-text {
+        word-wrap: break-word;
+        word-break: break-word;
+        white-space: normal;
+        line-height: 1.4;
+        max-width: 100%;
+    }
+
+    /* Стили для строк разделений в свернутом виде */
+    .split-row td {
+        word-wrap: break-word;
+        word-break: break-word;
+        white-space: normal;
+    }
+
+    /* Адаптация для мобильных устройств */
+    @media (max-width: 768px) {
+        .operations-table td, .operations-table th {
+            font-size: 11px;
+            padding: 6px 4px;
+        }
+        .select-inline {
+            font-size: 10px;
+            min-width: 100px;
+        }
+        .btn-split {
+            font-size: 9px;
+            padding: 2px 6px;
+        }
+    }
+    /* Стили для массового редактирования */
+    .batch-edit-panel {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+
+    .batch-edit-panel.active {
+        display: flex;
+    }
+
+    .batch-edit-panel .selected-count {
+        background: rgba(255,255,255,0.2);
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 14px;
+    }
+
+    .batch-edit-panel .batch-controls {
+        display: flex;
+        gap: 15px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .batch-edit-panel select {
+        padding: 8px 12px;
+        border-radius: 5px;
+        border: none;
+        min-width: 160px;
+        background: white;
+    }
+
+    .batch-edit-panel button {
+        background: #28a745;
+        color: white;
+        border: none;
+        padding: 8px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+    }
+
+    .batch-edit-panel button:hover {
+        background: #218838;
+    }
+
+    .batch-edit-panel .cancel-btn {
+        background: #6c757d;
+    }
+
+    .batch-edit-panel .cancel-btn:hover {
+        background: #5a6268;
+    }
+
+    .checkbox-col {
+        width: 30px;
+        text-align: center;
+    }
+
+    .checkbox-col input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+
+    .select-all-checkbox {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+
+    th.checkbox-col {
+        text-align: center;
+    }
+    /* Дополнительные стили для модального окна документов */
+    .documents-modal {
+        max-width: 600px;
+    }
+
+    .documents-list {
+        max-height: 400px;
+        overflow-y: auto;
+        margin: 15px 0;
+    }
+
+    .document-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px;
+        border-bottom: 1px solid #eee;
+        background: #f9f9f9;
+        margin-bottom: 5px;
+        border-radius: 5px;
+    }
+
+    .document-item:hover {
+        background: #e8f4fd;
+    }
+
+    .document-info {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .document-name {
+        font-weight: 500;
+        color: #333;
+    }
+
+    .document-meta {
+        font-size: 11px;
+        color: #666;
+    }
+
+    .document-actions {
+        display: flex;
+        gap: 10px;
+    }
+
+    .document-actions button {
+        padding: 5px 10px;
+        font-size: 11px;
+    }
+
+    .upload-area {
+        border: 2px dashed #ddd;
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+        margin-top: 15px;
+        background: #fafafa;
+    }
+
+    .upload-area input {
+        margin-top: 10px;
+    }
+
+    .operation-type-select {
+        padding: 6px;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+        font-size: 12px;
+        width: 100%;
+        background: white;
+    }
+
+    .operation-type-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 500;
+    }
+
+    .operation-type-payment { background: #28a745; color: white; }
+    .operation-type-expense { background: #dc3545; color: white; }
+    .operation-type-refund { background: #17a2b8; color: white; }
+    .operation-type-deposit { background: #ffc107; color: #333; }
+</style>
+
+<h2>💰 Редактирование операций</h2>
+
+<!-- Панель массового редактирования -->
+<div id="batchEditPanel" class="batch-edit-panel">
+    <div class="selected-count">
+        ✅ Выбрано: <span id="selectedCount">0</span> операций
+    </div>
+    <div class="batch-controls">
+        <select id="batchOperationType">
+            <option value="">-- Выберите тип операции --</option>
+            <option value="payment">💰 Оплата начисления</option>
+            <option value="expense">📤 Расход</option>
+            <option value="refund">🔄 Возврат</option>
+            <option value="deposit">💵 Депозит</option>
+        </select>
+        <select id="batchBudgetId" onchange="loadBatchSections()">
+            <option value="">-- Выберите смету --</option>
+            {% for b in budgets %}
+            <option value="{{ b.id }}">{{ b.name }} ({{ b.year or 'без года' }})</option>
+            {% endfor %}
+        </select>
+        <select id="batchSectionId" onchange="loadBatchArticles()" disabled>
+            <option value="">-- Сначала выберите смету --</option>
+        </select>
+        <select id="batchArticleId" disabled>
+            <option value="">-- Сначала выберите раздел --</option>
+        </select>
+        <button onclick="applyBatchUpdate()">📝 Задать для выбранных</button>
+        <button onclick="cancelBatchSelection()" class="cancel-btn">✖ Отменить</button>
+    </div>
+</div>
+
+<div class="stats-bar" id="statsBar">
+    <span>📊 <span id="totalCount">0</span> операций</span>
+    <span>📎 <span id="docsCount">0</span> с документами</span>
+    <span>🏷 <span id="classifiedCount">0</span> классифицировано</span>
+    <span>🔀 <span id="splitCount">0</span> разделено</span>
+    <button class="refresh-btn" onclick="loadOperations()">🔄 Обновить</button>
+    <button class="refresh-btn" style="background: #17a2b8;" onclick="generateReport()">📄 Отчет</button>
+    <button id="batchModeBtn" class="refresh-btn" style="background: #667eea;" onclick="toggleBatchMode()">☑ Массовое редактирование</button>
+</div>
+
+<div class="filters-bar">
+    <div class="filter-group">
+        <label>📅 Период с</label>
+        <input type="date" id="filterStartDate">
+    </div>
+    <div class="filter-group">
+        <label>📅 Период по</label>
+        <input type="date" id="filterEndDate">
+    </div>
+    <div class="filter-group">
+        <label>🏢 Контрагент</label>
+        <select id="filterCounterparty">
+            <option value="">Все</option>
+            {% for c in counterparties %}
+            <option value="{{ c }}">{{ c[:50] }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="filter-group">
+        <label>💰 Тип (доход/расход)</label>
+        <select id="filterTransactionType">
+            <option value="">Все</option>
+            <option value="income">📈 Доход</option>
+            <option value="expense">📉 Расход</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <label>🔍 Назначение платежа</label>
+        <input type="text" id="filterPurpose" placeholder="Поиск...">
+    </div>
+    <div class="filter-group">
+        <label>📋 Смета</label>
+        <select id="filterBudget">
+            <option value="">Все</option>
+            <option value="null">-- Без сметы --</option>
+            {% for b in budgets %}
+            <option value="{{ b.id }}">{{ b.name }} ({{ b.year or 'без года' }})</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="filter-group">
+        <label>🏷 Тип операции</label>
+        <select id="filterOperationType">
+            <option value="">Все</option>
+            <option value="null">-- Не задан --</option>
+            <option value="payment">💰 Оплата начисления</option>
+            <option value="expense">📤 Расход</option>
+            <option value="refund">🔄 Возврат</option>
+            <option value="deposit">💵 Депозит</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <label>📎 Есть документы</label>
+        <select id="filterHasDocuments">
+            <option value="">Все</option>
+            <option value="yes">✅ Да</option>
+            <option value="no">❌ Нет</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <label>&nbsp;</label>
+        <button onclick="loadOperations()" style="background: #667eea;">🔍 Применить</button>
+    </div>
+</div>
+
+<div class="operations-table">
+    <table id="operationsTable">
+        <thead>
+            <tr>
+                <th class="checkbox-col" style="display: none;" id="checkboxHeader">
+                    <input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox" onchange="toggleSelectAll()">
+                </th>
+                <th style="width: 70px;">Действие</th>
+                <th>Дата</th>
+                <th>Сумма</th>
+                <th>Тип</th>
+                <th>Тип операции</th>
+                <th>Контрагент</th>
+                <th>Назначение</th>
+                <th>Смета</th>
+                <th>Раздел</th>
+                <th>Статья</th>
+                <th>Док.</th>
+            </tr>
+        </thead>
+        <tbody id="operationsBody">
+            <tr><td colspan="12" class="loading">Загрузка операций...</tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Модальное окно для управления документами -->
+<div id="documentsModal" class="modal">
+    <div class="modal-content documents-modal">
+        <h3>📎 Управление документами операции</h3>
+
+        <div style="margin-bottom: 15px;">
+            <h4>📋 Прикрепленные документы</h4>
+            <div id="attachedDocumentsList" class="documents-list">
+                <p style="text-align: center; color: #666;">Загрузка...</p>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+            <h4>📚 Добавить из библиотеки</h4>
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <input type="text" id="searchAvailableDocs" placeholder="Поиск документов..." style="flex: 1; padding: 8px;">
+                <button onclick="loadAvailableDocuments()" style="background: #667eea;">🔍 Найти</button>
+            </div>
+            <div id="availableDocumentsList" class="documents-list" style="max-height: 200px;">
+                <p style="text-align: center; color: #666;">Загрузка...</p>
+            </div>
+        </div>
+
+        <div class="upload-area">
+            <label>📤 Загрузить новый документ для этой операции</label>
+            <input type="file" id="uploadDocumentInput" accept=".pdf">
+            <button onclick="uploadDirectDocument()" style="margin-top: 10px; background: #28a745;">Загрузить</button>
+            <p style="font-size: 11px; color: #666; margin-top: 5px;">Документ будет прикреплен только к этой операции</p>
+        </div>
+
+        <div style="margin-top: 20px; text-align: right;">
+            <a href="{{ url_for('documents_library') }}" target="_blank" style="margin-right: 10px;">📚 Управление библиотекой</a>
+            <button onclick="closeDocumentsModal()">Закрыть</button>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для автоматического распределения -->
+<div id="autoDistributeModal" class="modal">
+    <div class="modal-content">
+        <h3>Автоматическое распределение суммы</h3>
+        <div id="autoDistributeArticles"></div>
+        <div style="margin-top: 20px;">
+            <button onclick="applyAutoDistribute()" class="btn-success">Применить</button>
+            <button onclick="closeModal()" style="background: #6c757d;">Отмена</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Глобальные переменные
+let budgetsData = {};
+let sectionsData = {};
+let articlesData = {};
+let splitEditorState = {};
+let operationsData = [];
+let currentSplitOperationId = null;
+let autoDistributeArticlesList = [];
+
+// Загрузка смет при загрузке страницы
+{% for b in budgets %}
+budgetsData[{{ b.id }}] = {
+    id: {{ b.id }},
+    name: "{{ b.name }}",
+    sections: []
+};
+{% endfor %}
+
+
+function updateStats(operations) {
+    const total = operations.length;
+    const withDocs = operations.filter(op => op.has_documents).length;
+    const classified = operations.filter(op => op.article_id).length;
+    const split = operations.filter(op => op.is_split).length;
+
+    // Подсчет доходов и расходов
+    const incomeTotal = operations.reduce((sum, op) => sum + (op.credit_amount > 0 ? op.credit_amount : 0), 0);
+    const expenseTotal = operations.reduce((sum, op) => sum + (op.debit_amount > 0 ? op.debit_amount : 0), 0);
+
+    document.getElementById('totalCount').textContent = total;
+    document.getElementById('docsCount').textContent = withDocs;
+    document.getElementById('classifiedCount').textContent = classified;
+    document.getElementById('splitCount').textContent = split;
+
+    // Добавляем статистику по доходам/расходам, если есть место
+    const statsBar = document.getElementById('statsBar');
+}
+
+// Загрузка разделений для операции
+async function loadSplitsForOperation(operationId) {
+    console.log('loadSplitsForOperation called for:', operationId);
+
+    try {
+        const response = await fetch(`/api/operations/${operationId}/splits`);
+        const splits = await response.json();
+        console.log('Loaded splits:', splits);
+
+        splitEditorState[operationId] = { splits: splits, loading: false };
+
+        // Обновляем строку операции, чтобы скрыть выпадающие списки
+        await refreshOperationRow(operationId);
+
+        // Отрисовываем строки разделений
+        renderSplitRows(operationId, splits);
+    } catch (error) {
+        console.error('Error loading splits:', error);
+        splitEditorState[operationId] = { splits: [], loading: false };
+    }
+}
+
+// Функция обновления строки операции
+// Функция обновления строки операции
+async function refreshOperationRow(operationId) {
+    // Находим операцию в operationsData
+    const operation = operationsData.find(o => o.id === operationId);
+    if (!operation) {
+        console.error('Operation not found in operationsData:', operationId);
+        return;
+    }
+
+    const oldRow = document.querySelector(`tr[data-op-row="${operationId}"]`);
+    if (!oldRow) {
+        console.error('Old row not found for operation:', operationId);
+        return;
+    }
+
+    const hasSplits = splitEditorState[operationId] !== undefined && splitEditorState[operationId].splits && splitEditorState[operationId].splits.length > 0;
+
+    const newRow = document.createElement('tr');
+    newRow.setAttribute('data-op-row', operation.id);
+    newRow.style.borderBottom = '1px solid #eee';
+
+    // Если режим массового редактирования активен, добавляем ячейку с чекбоксом
+    if (batchModeActive) {
+        const checkboxCell = document.createElement('td');
+        checkboxCell.className = 'checkbox-col';
+        checkboxCell.style.textAlign = 'center';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'row-checkbox';
+        checkbox.setAttribute('data-op-id', operation.id);
+        checkbox.checked = selectedOperations.has(operation.id);
+        checkbox.onchange = (e) => {
+            const opId = parseInt(e.target.getAttribute('data-op-id'));
+            if (e.target.checked) {
+                selectedOperations.add(opId);
+            } else {
+                selectedOperations.delete(opId);
+                const selectAll = document.getElementById('selectAllCheckbox');
+                if (selectAll) selectAll.checked = false;
+            }
+            updateSelectedCount();
+        };
+        checkboxCell.appendChild(checkbox);
+        newRow.appendChild(checkboxCell);
+    }
+
+    // 1. Кнопка разделения
+    const splitCell = document.createElement('td');
+    splitCell.style.textAlign = 'center';
+    splitCell.style.verticalAlign = 'middle';
+    const splitBtn = document.createElement('button');
+    splitBtn.className = 'btn-split';
+    splitBtn.textContent = hasSplits ? '✂️ Закрыть' : '✂️ Разделить';
+    if (hasSplits) splitBtn.classList.add('active');
+    splitBtn.onclick = () => toggleSplitMode(operation.id, splitBtn);
+    splitCell.appendChild(splitBtn);
+    newRow.appendChild(splitCell);
+
+    // 2. Дата
+    const dateCell = document.createElement('td');
+    dateCell.textContent = operation.date_display || '-';
+    dateCell.style.whiteSpace = 'nowrap';
+    newRow.appendChild(dateCell);
+
+    // 3. Сумма
+    const amountCell = document.createElement('td');
+    amountCell.className = operation.type_class;
+    amountCell.textContent = `${operation.amount_display || '0.00'} ₽`;
+    amountCell.style.textAlign = 'right';
+    amountCell.style.fontWeight = 'bold';
+    amountCell.style.whiteSpace = 'nowrap';
+    newRow.appendChild(amountCell);
+
+    // 4. Тип
+    const typeCell = document.createElement('td');
+    typeCell.className = operation.type_class;
+    typeCell.textContent = operation.type || (operation.debit_amount > 0 ? 'Расход' : 'Доход');
+    typeCell.style.whiteSpace = 'nowrap';
+    newRow.appendChild(typeCell);
+
+    // 5. Тип операции
+    const opTypeCell = document.createElement('td');
+    const opTypeSelect = document.createElement('select');
+    opTypeSelect.className = 'operation-type-select';
+    opTypeSelect.setAttribute('data-op-type', operation.id);
+    opTypeSelect.onchange = () => updateOperationType(operation.id, opTypeSelect.value);
+
+    const opTypes = [
+        { value: '', label: '-- Не выбран --' },
+        { value: 'payment', label: '💰 Оплата начисления' },
+        { value: 'expense', label: '📤 Расход' },
+        { value: 'refund', label: '🔄 Возврат' },
+        { value: 'deposit', label: '💵 Депозит' }
+    ];
+
+    opTypes.forEach(opt => {
+        const option = document.createElement('option');
+        option.value = opt.value;
+        option.textContent = opt.label;
+        if (operation.operation_type === opt.value || (!operation.operation_type && opt.value === '')) {
+            option.selected = true;
+        }
+        opTypeSelect.appendChild(option);
+    });
+    opTypeCell.appendChild(opTypeSelect);
+    newRow.appendChild(opTypeCell);
+
+    // 6. Контрагент
+    const counterpartyCell = document.createElement('td');
+    counterpartyCell.className = 'cell-text';
+    counterpartyCell.textContent = operation.counterparty || '-';
+    counterpartyCell.title = operation.counterparty || '';
+    newRow.appendChild(counterpartyCell);
+
+    // 7. Назначение
+    const purposeCell = document.createElement('td');
+    purposeCell.className = 'cell-text';
+    purposeCell.textContent = operation.purpose || '-';
+    purposeCell.title = operation.purpose || '';
+    newRow.appendChild(purposeCell);
+
+    // 8-10. Смета, Раздел, Статья
+    if (hasSplits) {
+        const budgetCell = document.createElement('td');
+        budgetCell.innerHTML = '<span class="split-badge">🔀 Разделено</span>';
+        budgetCell.style.verticalAlign = 'middle';
+        newRow.appendChild(budgetCell);
+
+        const sectionCell = document.createElement('td');
+        sectionCell.textContent = '—';
+        sectionCell.style.verticalAlign = 'middle';
+        newRow.appendChild(sectionCell);
+
+        const articleCell = document.createElement('td');
+        articleCell.textContent = '—';
+        articleCell.style.verticalAlign = 'middle';
+        newRow.appendChild(articleCell);
+    } else {
+        // Смета
+        const budgetCell = document.createElement('td');
+        const budgetSelect = document.createElement('select');
+        budgetSelect.className = 'select-inline';
+        budgetSelect.setAttribute('data-op', operation.id);
+        budgetSelect.setAttribute('data-field', 'budget_id');
+        budgetSelect.onchange = () => onBudgetChange(operation.id, budgetSelect.value);
+
+        const defaultBudgetOption = document.createElement('option');
+        defaultBudgetOption.value = '';
+        defaultBudgetOption.textContent = '-- Без сметы --';
+        budgetSelect.appendChild(defaultBudgetOption);
+
+        for (const [id, budget] of Object.entries(budgetsData)) {
+            const option = document.createElement('option');
+            option.value = id;
+            option.textContent = budget.name;
+            if (operation.budget_id == id) option.selected = true;
+            budgetSelect.appendChild(option);
+        }
+        budgetCell.appendChild(budgetSelect);
+        newRow.appendChild(budgetCell);
+
+        // Раздел
+        const sectionCell = document.createElement('td');
+        const sectionSelect = document.createElement('select');
+        sectionSelect.className = 'select-inline';
+        sectionSelect.setAttribute('data-op', operation.id);
+        sectionSelect.setAttribute('data-field', 'section_id');
+        sectionSelect.onchange = () => onSectionChange(operation.id, sectionSelect.value);
+        sectionSelect.innerHTML = '<option value="">-- Выберите раздел --</option>';
+
+        if (operation.budget_id && !sectionsData[operation.budget_id]) {
+            const response = await fetch(`/api/budgets/${operation.budget_id}/sections`);
+            sectionsData[operation.budget_id] = await response.json();
+        }
+
+        if (operation.budget_id && sectionsData[operation.budget_id]) {
+            sectionsData[operation.budget_id].forEach(section => {
+                const option = document.createElement('option');
+                option.value = section.id;
+                option.textContent = `${section.code} - ${section.name}`;
+                if (operation.section_id == section.id) option.selected = true;
+                sectionSelect.appendChild(option);
+            });
+        }
+        sectionCell.appendChild(sectionSelect);
+        newRow.appendChild(sectionCell);
+
+        // Статья
+        const articleCell = document.createElement('td');
+        const articleSelect = document.createElement('select');
+        articleSelect.className = 'select-inline';
+        articleSelect.setAttribute('data-op', operation.id);
+        articleSelect.setAttribute('data-field', 'article_id');
+        articleSelect.onchange = () => onArticleChange(operation.id, articleSelect.value);
+        articleSelect.innerHTML = '<option value="">-- Выберите статью --</option>';
+
+        if (operation.section_id && articlesData[operation.section_id]) {
+            articlesData[operation.section_id].forEach(article => {
+                const option = document.createElement('option');
+                option.value = article.id;
+                option.textContent = `${article.code} - ${article.name}`;
+                if (operation.article_id == article.id) option.selected = true;
+                articleSelect.appendChild(option);
+            });
+        }
+        articleCell.appendChild(articleSelect);
+        newRow.appendChild(articleCell);
+    }
+
+    // 11. Документы
+    const docsCell = document.createElement('td');
+    docsCell.style.textAlign = 'center';
+    docsCell.style.verticalAlign = 'middle';
+    const docsBtn = document.createElement('button');
+    docsBtn.className = 'btn-split';
+    docsBtn.innerHTML = operation.has_documents ? '📎' + operation.documents_count : '📎';
+    docsBtn.title = operation.has_documents ? 'Управление документами' : 'Прикрепить документы';
+    docsBtn.style.background = operation.has_documents ? '#28a745' : '#6c757d';
+    docsBtn.style.color = 'white';
+    docsBtn.onclick = () => openDocumentsModal(operation.id);
+    docsCell.appendChild(docsBtn);
+    newRow.appendChild(docsCell);
+
+    // Заменяем старую строку
+    oldRow.parentNode.replaceChild(newRow, oldRow);
+}
+
+// Функция переключения режима разделения
+async function toggleSplitMode(operationId, button) {
+    console.log('toggleSplitMode called for operation:', operationId);
+
+    if (splitEditorState[operationId] && splitEditorState[operationId].splits.length > 0) {
+        // Закрыть режим разделения
+        delete splitEditorState[operationId];
+        button.classList.remove('active');
+        button.textContent = '✂️ Разделить';
+        removeSplitRows(operationId);
+
+        // Обновляем строку операции, чтобы вернуть выпадающие списки
+        await refreshOperationRow(operationId);
+    } else {
+        // Открыть режим разделения
+        splitEditorState[operationId] = { splits: [], loading: true };
+        button.classList.add('active');
+        button.textContent = '✂️ Закрыть';
+
+        // Обновляем строку операции, чтобы скрыть выпадающие списки
+        await refreshOperationRow(operationId);
+
+        // Загружаем существующие разделения
+        await loadSplitsForOperation(operationId);
+    }
+}
+
+function removeSplitRows(operationId) {
+    const row = document.querySelector(`tr[data-op-row="${operationId}"]`);
+    if (!row) return;
+
+    let nextRow = row.nextSibling;
+    while (nextRow && nextRow.getAttribute && nextRow.getAttribute('data-split-for') === String(operationId)) {
+        const toRemove = nextRow;
+        nextRow = nextRow.nextSibling;
+        toRemove.remove();
+    }
+}
+
+// Функция отрисовки строк с разделениями
+// Функция отрисовки строк с разделениями (сделана асинхронной)
+async function renderSplitRows(operationId, splits) {
+    console.log('renderSplitRows called for operation:', operationId, 'splits:', splits);
+
+    const row = document.querySelector(`tr[data-op-row="${operationId}"]`);
+    if (!row) {
+        console.error('Parent row not found for operation:', operationId);
+        return;
+    }
+
+    // Удаляем существующие строки разделений
+    removeSplitRows(operationId);
+
+    const operation = operationsData.find(o => o.id === operationId);
+    if (!operation) {
+        console.error('Operation not found in operationsData:', operationId);
+        return;
+    }
+
+    const originalAmount = operation.debit_amount > 0 ? operation.debit_amount : operation.credit_amount;
+    const splitsTotal = splits.reduce((sum, s) => sum + (s.amount || 0), 0);
+    const remaining = originalAmount - splitsTotal;
+
+    // Строка с итогами
+    const summaryRow = document.createElement('tr');
+    summaryRow.setAttribute('data-split-for', operationId);
+    summaryRow.style.background = '#f8f9fa';
+    summaryRow.innerHTML = `
+        <td colspan="2" class="split-indent">
+            <strong>📊 Разделение операции:</strong>
+         </td>
+        <td colspan="8">
+            <div class="split-summary">
+                Распределено: ${splitsTotal.toFixed(2)} ₽ |
+                Остаток: <span class="${remaining >= 0 ? 'split-remaining' : 'split-over'}">${remaining.toFixed(2)} ₽</span>
+                <button onclick="addSplit(${operationId})" class="btn-split" style="margin-left: 10px;">+ Добавить строку</button>
+                <button onclick="openAutoDistribute(${operationId}, ${originalAmount})" class="btn-split">⚡ Автораспределение</button>
+            </div>
+         </td>
+    `;
+    row.parentNode.insertBefore(summaryRow, row.nextSibling);
+
+    // Строки с разделениями
+    for (const split of splits) {
+        const splitRow = document.createElement('tr');
+        splitRow.setAttribute('data-split-for', operationId);
+        splitRow.className = 'split-row';
+
+        // Создаем уникальные ID для select'ов
+        const budgetSelectId = `split_budget_${split.id}`;
+        const sectionSelectId = `split_section_${split.id}`;
+        const articleSelectId = `split_article_${split.id}`;
+
+        splitRow.innerHTML = `
+            <td class="split-indent">
+                <input type="number" step="0.01" value="${split.amount || 0}"
+                       onchange="updateSplitAmount(${split.id}, ${operationId}, this.value)"
+                       style="width: 100px; padding: 4px;">
+             </td>
+            <td colspan="3">
+                <input type="text" value="${split.description || ''}"
+                       placeholder="Описание"
+                       onchange="updateSplitDescription(${split.id}, ${operationId}, this.value)"
+                       style="width: 100%; padding: 4px;">
+             </td>
+            <td>
+                <select id="${budgetSelectId}" class="select-inline" style="width: 100%;"
+                        onchange="updateSplitBudget(${split.id}, ${operationId}, this.value)">
+                    <option value="">-- Без сметы --</option>
+                    ${Object.entries(budgetsData).map(([id, budget]) =>
+                        `<option value="${id}" ${split.budget_id == id ? 'selected' : ''}>${budget.name}</option>`
+                    ).join('')}
+                </select>
+             </td>
+            <td>
+                <select id="${sectionSelectId}" class="select-inline" style="width: 100%;"
+                        onchange="updateSplitSection(${split.id}, ${operationId}, this.value)">
+                    <option value="">-- Выберите раздел --</option>
+                </select>
+             </td>
+            <td>
+                <select id="${articleSelectId}" class="select-inline" style="width: 100%;"
+                        onchange="updateSplitArticle(${split.id}, ${operationId}, this.value)">
+                    <option value="">-- Выберите статью --</option>
+                </select>
+             </td>
+            <td>
+                <button onclick="deleteSplit(${split.id}, ${operationId})" class="btn-danger" style="padding: 2px 8px;">×</button>
+             </td>
+        `;
+        row.parentNode.insertBefore(splitRow, summaryRow.nextSibling);
+
+        // Загружаем разделы для выбранной сметы
+        if (split.budget_id) {
+            loadSectionsForSplitSelect(split.budget_id, sectionSelectId, split.section_id);
+        }
+
+        // Загружаем статьи для выбранного раздела
+        if (split.section_id) {
+            loadArticlesForSplitSelect(split.section_id, articleSelectId, split.article_id);
+        }
+    }
+}
+
+async function updateSplitDescription(splitId, operationId, value) {
+    try {
+        const response = await fetch(`/api/splits/${splitId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ description: value })
+        });
+
+        const result = await response.json();
+        if (result.error) {
+            alert(result.error);
+        }
+    } catch (error) {
+        console.error('Error updating split description:', error);
+    }
+}
+
+// Функция обновления сметы для разделения
+async function updateSplitBudget(splitId, operationId, budgetId) {
+    try {
+        const response = await fetch(`/api/splits/${splitId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ budget_id: budgetId || null })
+        });
+
+        const result = await response.json();
+        if (result.error) {
+            alert(result.error);
+        } else if (result.success) {
+            // Загружаем разделы для новой сметы
+            const sectionSelectId = `split_section_${splitId}`;
+            loadSectionsForSplitSelect(budgetId, sectionSelectId, null);
+
+            // Очищаем выбор статьи
+            const articleSelectId = `split_article_${splitId}`;
+            const articleSelect = document.getElementById(articleSelectId);
+            if (articleSelect) {
+                articleSelect.innerHTML = '<option value="">-- Выберите статью --</option>';
+            }
+        }
+    } catch (error) {
+        console.error('Error updating split budget:', error);
+    }
+}
+
+// Функция обновления раздела для разделения
+async function updateSplitSection(splitId, operationId, sectionId) {
+    try {
+        const response = await fetch(`/api/splits/${splitId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ section_id: sectionId || null })
+        });
+
+        const result = await response.json();
+        if (result.error) {
+            alert(result.error);
+        } else if (result.success) {
+            // Загружаем статьи для нового раздела
+            const articleSelectId = `split_article_${splitId}`;
+            loadArticlesForSplitSelect(sectionId, articleSelectId, null);
+        }
+    } catch (error) {
+        console.error('Error updating split section:', error);
+    }
+}
+
+// Функция обновления статьи для разделения
+async function updateSplitArticle(splitId, operationId, articleId) {
+    try {
+        const response = await fetch(`/api/splits/${splitId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ article_id: articleId || null })
+        });
+
+        const result = await response.json();
+        if (result.error) {
+            alert(result.error);
+        }
+    } catch (error) {
+        console.error('Error updating split article:', error);
+    }
+}
+
+// Функция загрузки разделов для select'а в разделении
+async function loadSectionsForSplitSelect(budgetId, selectId, selectedSectionId) {
+    if (!budgetId) {
+        const select = document.getElementById(selectId);
+        if (select) {
+            select.innerHTML = '<option value="">-- Выберите сначала смету --</option>';
+        }
+        return;
+    }
+
+    try {
+        // Загружаем разделы, если еще не загружены
+        if (budgetId && !sectionsData[budgetId]) {
+            const response = await fetch(`/api/budgets/${budgetId}/sections`);
+            sectionsData[budgetId] = await response.json();
+        }
+
+        const select = document.getElementById(selectId);
+        if (select) {
+            select.innerHTML = '<option value="">-- Выберите раздел --</option>';
+            sectionsData[budgetId].forEach(section => {
+                const option = document.createElement('option');
+                option.value = section.id;
+                option.textContent = `${section.code} - ${section.name}`;
+                if (selectedSectionId == section.id) option.selected = true;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading sections for split:', error);
+        const select = document.getElementById(selectId);
+        if (select) {
+            select.innerHTML = '<option value="">-- Ошибка загрузки --</option>';
+        }
+    }
+}
+
+// Функция загрузки разделов для select'а в разделении
+async function loadSectionsForSplitSelect(budgetId, selectId, selectedSectionId) {
+    if (!budgetId) {
+        const select = document.getElementById(selectId);
+        if (select) {
+            select.innerHTML = '<option value="">-- Выберите сначала смету --</option>';
+        }
+        return;
+    }
+
+    try {
+        // Загружаем разделы, если еще не загружены
+        if (budgetId && !sectionsData[budgetId]) {
+            const response = await fetch(`/api/budgets/${budgetId}/sections`);
+            sectionsData[budgetId] = await response.json();
+        }
+
+        const select = document.getElementById(selectId);
+        if (select) {
+            select.innerHTML = '<option value="">-- Выберите раздел --</option>';
+            sectionsData[budgetId].forEach(section => {
+                const option = document.createElement('option');
+                option.value = section.id;
+                option.textContent = `${section.code} - ${section.name}`;
+                if (selectedSectionId == section.id) option.selected = true;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading sections for split:', error);
+        const select = document.getElementById(selectId);
+        if (select) {
+            select.innerHTML = '<option value="">-- Ошибка загрузки --</option>';
+        }
+    }
+}
+
+// Функция загрузки статей для select'а в разделении
+async function loadArticlesForSplitSelect(sectionId, selectId, selectedArticleId) {
+    if (!sectionId) {
+        const select = document.getElementById(selectId);
+        if (select) {
+            select.innerHTML = '<option value="">-- Выберите сначала раздел --</option>';
+        }
+        return;
+    }
+
+    try {
+        // Загружаем статьи, если еще не загружены
+        if (sectionId && !articlesData[sectionId]) {
+            const response = await fetch(`/api/sections/${sectionId}/articles`);
+            articlesData[sectionId] = await response.json();
+        }
+
+        const select = document.getElementById(selectId);
+        if (select) {
+            select.innerHTML = '<option value="">-- Выберите статью --</option>';
+            articlesData[sectionId].forEach(article => {
+                const option = document.createElement('option');
+                option.value = article.id;
+                option.textContent = `${article.code} - ${article.name}`;
+                if (selectedArticleId == article.id) option.selected = true;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading articles for split:', error);
+        const select = document.getElementById(selectId);
+        if (select) {
+            select.innerHTML = '<option value="">-- Ошибка загрузки --</option>';
+        }
+    }
+}
+
+// Функция обновления сметы для разделения с последующей загрузкой разделов
+async function updateSplitAmount(splitId, operationId, value) {
+    const amount = parseFloat(value);
+    if (isNaN(amount)) return;
+
+    try {
+        const response = await fetch(`/api/splits/${splitId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount: amount })
+        });
+
+        const result = await response.json();
+        if (result.error) {
+            alert(result.error);
+            await loadSplitsForOperation(operationId);
+        } else if (result.success) {
+            await loadSplitsForOperation(operationId);
+            await loadOperations();
+        }
+    } catch (error) {
+        console.error('Error updating split amount:', error);
+    }
+}
+
+// Функция обновления раздела для разделения с последующей загрузкой статей
+async function updateSplitSectionAndLoadArticles(splitId, operationId, sectionId) {
+    // Сначала обновляем section_id
+    await updateSplit(splitId, operationId, 'section_id', sectionId);
+
+    // Затем загружаем статьи для нового раздела
+    const articleSelectId = `split_article_${splitId}`;
+    await loadArticlesForSplitSelect(sectionId, articleSelectId, null);
+}
+
+// Добавление нового разделения
+async function addSplit(operationId) {
+    const amount = prompt('Введите сумму для разделения (руб):');
+    if (!amount) return;
+
+    const description = prompt('Введите описание (необязательно):', '');
+
+    try {
+        const response = await fetch(`/api/operations/${operationId}/splits`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount: parseFloat(amount), description: description || '' })
+        });
+
+        const result = await response.json();
+        if (result.error) {
+            alert(result.error);
+        } else {
+            // Обновляем данные операции (флаг is_split)
+            await loadOperations();
+        }
+    } catch (error) {
+        console.error('Error adding split:', error);
+        alert('Ошибка при добавлении разделения');
+    }
+}
+
+// Удаление разделения
+async function deleteSplit(splitId, operationId) {
+    if (!confirm('Удалить это разделение?')) return;
+
+    try {
+        const response = await fetch(`/api/splits/${splitId}`, {
+            method: 'DELETE'
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            await loadSplitsForOperation(operationId);
+            await loadOperations();
+        }
+    } catch (error) {
+        console.error('Error deleting split:', error);
+        alert('Ошибка при удалении разделения');
+    }
+}
+
+// Обновление разделения
+async function updateSplit(splitId, operationId, field, value) {
+    const data = {};
+    data[field] = value || null;
+
+    try {
+        const response = await fetch(`/api/splits/${splitId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+        if (result.error) {
+            alert(result.error);
+            if (field === 'amount') {
+                await loadSplitsForOperation(operationId);
+            }
+        } else if (result.success) {
+            if (field === 'amount') {
+                await loadSplitsForOperation(operationId);
+                await loadOperations();
+            }
+            // Визуальное подтверждение
+            const select = document.getElementById(`split_${field}_${splitId}`);
+            if (select) {
+                select.classList.add('saved');
+                setTimeout(() => select.classList.remove('saved'), 500);
+            }
+        }
+    } catch (error) {
+        console.error('Error updating split:', error);
+    }
+}
+
+// Сохранение операции
+async function saveOperation(operationId, field, value) {
+    const data = {};
+    data[field] = value || null;
+
+    try {
+        const response = await fetch(`/api/operations/${operationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            const select = document.querySelector(`select[data-op="${operationId}"][data-field="${field}"]`);
+            if (select) {
+                select.classList.add('saved');
+                setTimeout(() => select.classList.remove('saved'), 500);
+            }
+
+            if (field === 'budget_id') {
+                const row = document.querySelector(`tr[data-op-row="${operationId}"]`);
+                if (row) {
+                    const sectionSelect = row.querySelector('select[data-field="section_id"]');
+                    const articleSelect = row.querySelector('select[data-field="article_id"]');
+                    if (sectionSelect) {
+                        sectionSelect.innerHTML = '<option value="">-- Загрузка... --</option>';
+                        loadSectionsForSelect(value, sectionSelect, null);
+                    }
+                    if (articleSelect) {
+                        articleSelect.innerHTML = '<option value="">-- Сначала выберите раздел --</option>';
+                    }
+                }
+            }
+
+            if (field === 'section_id') {
+                const row = document.querySelector(`tr[data-op-row="${operationId}"]`);
+                if (row) {
+                    const articleSelect = row.querySelector('select[data-field="article_id"]');
+                    if (articleSelect) {
+                        articleSelect.innerHTML = '<option value="">-- Загрузка... --</option>';
+                        loadArticlesForSelect(value, articleSelect, null);
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error saving operation:', error);
+    }
+}
+
+function onBudgetChange(operationId, budgetId) {
+    saveOperation(operationId, 'budget_id', budgetId);
+}
+
+function onSectionChange(operationId, sectionId) {
+    saveOperation(operationId, 'section_id', sectionId);
+}
+
+function onArticleChange(operationId, articleId) {
+    saveOperation(operationId, 'article_id', articleId);
+}
+
+async function loadSectionsForSelect(budgetId, selectElement, currentSectionId) {
+    if (!budgetId) {
+        selectElement.innerHTML = '<option value="">-- Выберите сначала смету --</option>';
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/budgets/${budgetId}/sections`);
+        const sections = await response.json();
+
+        if (budgetId && !sectionsData[budgetId]) {
+            const response = await fetch(`/api/budgets/${budgetId}/sections`);
+            sectionsData[budgetId] = await response.json();
+        }
+
+        sectionsData[budgetId] = sections;
+        selectElement.innerHTML = '<option value="">-- Выберите раздел --</option>';
+        sections.forEach(section => {
+            const option = document.createElement('option');
+            option.value = section.id;
+            option.textContent = `${section.code} - ${section.name}`;
+            if (currentSectionId == section.id) option.selected = true;
+            selectElement.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading sections:', error);
+        selectElement.innerHTML = '<option value="">-- Ошибка загрузки --</option>';
+    }
+}
+
+async function loadArticlesForSelect(sectionId, selectElement, currentArticleId) {
+    if (!sectionId) {
+        selectElement.innerHTML = '<option value="">-- Выберите сначала раздел --</option>';
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/sections/${sectionId}/articles`);
+        const articles = await response.json();
+        articlesData[sectionId] = articles;
+        selectElement.innerHTML = '<option value="">-- Выберите статью --</option>';
+        articles.forEach(article => {
+            const option = document.createElement('option');
+            option.value = article.id;
+            option.textContent = `${article.code} - ${article.name}`;
+            if (currentArticleId == article.id) option.selected = true;
+            selectElement.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading articles:', error);
+        selectElement.innerHTML = '<option value="">-- Ошибка загрузки --</option>';
+    }
+}
+
+// Открыть модальное окно для автоматического распределения
+function openAutoDistribute(operationId, amount) {
+    currentSplitOperationId = operationId;
+    const modal = document.getElementById('autoDistributeModal');
+    const container = document.getElementById('autoDistributeArticles');
+
+    container.innerHTML = `
+        <div class="split-item">
+            <label>Выберите статьи и укажите процент распределения (сумма должна быть 100%):</label>
+        </div>
+        <div id="articlesList"></div>
+        <button onclick="addArticleRowForAutoDistribute()" style="margin-top: 10px;">+ Добавить статью</button>
+    `;
+
+    autoDistributeArticlesList = [];
+    addArticleRowForAutoDistribute();
+
+    modal.style.display = 'flex';
+}
+
+function addArticleRowForAutoDistribute() {
+    const container = document.getElementById('articlesList');
+    const index = autoDistributeArticlesList.length;
+    const row = document.createElement('div');
+    row.className = 'split-item';
+    row.id = `article_row_${index}`;
+    row.innerHTML = `
+        <select class="article-select" id="article_${index}" style="width: 60%;">
+            <option value="">-- Выберите статью --</option>
+        </select>
+        <input type="number" class="split-amount-input" id="percent_${index}" placeholder="%" step="0.1" style="width: 80px;">
+        <button onclick="removeArticleRowForAutoDistribute(${index})" class="btn-danger" style="padding: 2px 8px;">×</button>
+    `;
+    container.appendChild(row);
+
+    loadArticlesForSelectAutoDistribute(`article_${index}`);
+
+    autoDistributeArticlesList.push({ id: index, article_id: null, percent: 0 });
+}
+
+function removeArticleRowForAutoDistribute(index) {
+    const row = document.getElementById(`article_row_${index}`);
+    if (row) row.remove();
+    autoDistributeArticlesList = autoDistributeArticlesList.filter(a => a.id !== index);
+}
+
+async function loadArticlesForSelectAutoDistribute(selectId) {
+    const select = document.getElementById(selectId);
+
+    try {
+        const response = await fetch('/api/budgets');
+        const budgets = await response.json();
+
+        for (const budget of budgets) {
+            const group = document.createElement('optgroup');
+            group.label = budget.name;
+
+            const sectionsResp = await fetch(`/api/budgets/${budget.id}/sections`);
+            const sections = await sectionsResp.json();
+
+            for (const section of sections) {
+                const articlesResp = await fetch(`/api/sections/${section.id}/articles`);
+                const articles = await articlesResp.json();
+
+                for (const article of articles) {
+                    const option = document.createElement('option');
+                    option.value = article.id;
+                    option.textContent = `${section.code}.${article.code} - ${article.name}`;
+                    group.appendChild(option);
+                }
+            }
+            select.appendChild(group);
+        }
+
+        const idx = parseInt(selectId.split('_')[1]);
+        select.onchange = (e) => {
+            const item = autoDistributeArticlesList.find(a => a.id === idx);
+            if (item) item.article_id = e.target.value;
+        };
+
+        const percentInput = document.getElementById(`percent_${idx}`);
+        percentInput.onchange = (e) => {
+            const item = autoDistributeArticlesList.find(a => a.id === idx);
+            if (item) item.percent = parseFloat(e.target.value) || 0;
+        };
+    } catch (error) {
+        console.error('Error loading articles:', error);
+    }
+}
+
+async function applyAutoDistribute() {
+    const articles = [];
+    let totalPercent = 0;
+
+    for (const item of autoDistributeArticlesList) {
+        if (item.article_id && item.percent > 0) {
+            articles.push({ article_id: parseInt(item.article_id), percent: item.percent });
+            totalPercent += item.percent;
+        }
+    }
+
+    if (Math.abs(totalPercent - 100) > 0.01) {
+        alert(`Сумма процентов должна быть равна 100% (сейчас ${totalPercent}%)`);
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/operations/${currentSplitOperationId}/splits/auto_distribute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ articles: articles })
+        });
+
+        const result = await response.json();
+        if (result.error) {
+            alert(result.error);
+        } else {
+            closeModal();
+            await loadSplitsForOperation(currentSplitOperationId);
+            await loadOperations();
+        }
+    } catch (error) {
+        console.error('Error auto distributing:', error);
+        alert('Ошибка при автоматическом распределении');
+    }
+}
+
+function closeModal() {
+    document.getElementById('autoDistributeModal').style.display = 'none';
+    currentSplitOperationId = null;
+}
+
+
+
+// Загрузка при загрузке страницы
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('Page loaded, initializing...');
+    loadOperations();
+
+    let timeout;
+    const inputs = ['filterStartDate', 'filterEndDate', 'filterCounterparty', 'filterPurpose', 'filterBudget'];
+    inputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', () => loadOperations());
+            if (el.tagName === 'INPUT' && el.type === 'text') {
+                el.addEventListener('input', () => {
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => loadOperations(), 500);
+                });
+            }
+        }
+    });
+});
+let batchModeActive = false;
+let selectedOperations = new Set();
+
+// Функция переключения режима массового редактирования
+function toggleBatchMode() {
+    batchModeActive = !batchModeActive;
+    const checkboxHeader = document.getElementById('checkboxHeader');
+    const batchPanel = document.getElementById('batchEditPanel');
+    const batchBtn = document.getElementById('batchModeBtn');
+
+    if (batchModeActive) {
+        checkboxHeader.style.display = 'table-cell';
+        batchPanel.classList.add('active');
+        batchBtn.style.background = '#28a745';
+        batchBtn.textContent = '✓ Выход';
+        // Добавляем чекбоксы ко всем строкам
+        addCheckboxesToRows();
+    } else {
+        checkboxHeader.style.display = 'none';
+        batchPanel.classList.remove('active');
+        batchBtn.style.background = '#667eea';
+        batchBtn.textContent = '☑ Массовое редактирование';
+        selectedOperations.clear();
+        updateSelectedCount();
+        // Удаляем чекбоксы из строк
+        removeCheckboxesFromRows();
+    }
+}
+
+// Добавление чекбоксов к строкам
+function addCheckboxesToRows() {
+    const rows = document.querySelectorAll('#operationsBody tr[data-op-row]');
+    rows.forEach(row => {
+        const firstCell = row.cells[0];
+        if (firstCell && !firstCell.querySelector('.row-checkbox')) {
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'row-checkbox';
+            checkbox.setAttribute('data-op-id', row.getAttribute('data-op-row'));
+            checkbox.onchange = (e) => {
+                const opId = parseInt(e.target.getAttribute('data-op-id'));
+                if (e.target.checked) {
+                    selectedOperations.add(opId);
+                } else {
+                    selectedOperations.delete(opId);
+                    const selectAll = document.getElementById('selectAllCheckbox');
+                    if (selectAll) selectAll.checked = false;
+                }
+                updateSelectedCount();
+            };
+
+            const newCell = document.createElement('td');
+            newCell.className = 'checkbox-col';
+            newCell.style.textAlign = 'center';
+            newCell.appendChild(checkbox);
+
+            row.insertBefore(newCell, row.cells[0]);
+        }
+    });
+}
+
+// Удаление чекбоксов из строк
+function removeCheckboxesFromRows() {
+    const rows = document.querySelectorAll('#operationsBody tr[data-op-row]');
+    rows.forEach(row => {
+        const firstCell = row.cells[0];
+        if (firstCell && firstCell.classList.contains('checkbox-col')) {
+            row.removeChild(firstCell);
+        }
+    });
+}
+
+// Выделить/снять все
+function toggleSelectAll() {
+    const selectAll = document.getElementById('selectAllCheckbox');
+    const checkboxes = document.querySelectorAll('.row-checkbox');
+
+    checkboxes.forEach(cb => {
+        cb.checked = selectAll.checked;
+        const opId = parseInt(cb.getAttribute('data-op-id'));
+        if (selectAll.checked) {
+            selectedOperations.add(opId);
+        } else {
+            selectedOperations.delete(opId);
+        }
+    });
+    updateSelectedCount();
+}
+
+// Обновление счетчика выбранных операций
+function updateSelectedCount() {
+    const count = selectedOperations.size;
+    document.getElementById('selectedCount').textContent = count;
+
+    // Если нет выбранных, очищаем форму
+    if (count === 0) {
+        document.getElementById('batchBudgetId').value = '';
+        document.getElementById('batchSectionId').innerHTML = '<option value="">-- Сначала выберите смету --</option>';
+        document.getElementById('batchArticleId').innerHTML = '<option value="">-- Сначала выберите раздел --</option>';
+        document.getElementById('batchSectionId').disabled = true;
+        document.getElementById('batchArticleId').disabled = true;
+    }
+}
+
+// Загрузка разделов для массового редактирования
+async function loadBatchSections() {
+    const budgetId = document.getElementById('batchBudgetId').value;
+    const sectionSelect = document.getElementById('batchSectionId');
+    const articleSelect = document.getElementById('batchArticleId');
+
+    if (!budgetId) {
+        sectionSelect.innerHTML = '<option value="">-- Сначала выберите смету --</option>';
+        sectionSelect.disabled = true;
+        articleSelect.innerHTML = '<option value="">-- Сначала выберите раздел --</option>';
+        articleSelect.disabled = true;
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/budgets/${budgetId}/sections`);
+        const sections = await response.json();
+
+        sectionSelect.innerHTML = '<option value="">-- Выберите раздел --</option>';
+        sections.forEach(section => {
+            const option = document.createElement('option');
+            option.value = section.id;
+            option.textContent = `${section.code} - ${section.name}`;
+            sectionSelect.appendChild(option);
+        });
+        sectionSelect.disabled = false;
+
+        // Сбрасываем выбор статьи
+        articleSelect.innerHTML = '<option value="">-- Сначала выберите раздел --</option>';
+        articleSelect.disabled = true;
+    } catch (error) {
+        console.error('Error loading sections:', error);
+    }
+}
+
+// Загрузка статей для массового редактирования
+async function loadBatchArticles() {
+    const sectionId = document.getElementById('batchSectionId').value;
+    const articleSelect = document.getElementById('batchArticleId');
+
+    if (!sectionId) {
+        articleSelect.innerHTML = '<option value="">-- Сначала выберите раздел --</option>';
+        articleSelect.disabled = true;
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/sections/${sectionId}/articles`);
+        const articles = await response.json();
+
+        articleSelect.innerHTML = '<option value="">-- Выберите статью --</option>';
+        articles.forEach(article => {
+            const option = document.createElement('option');
+            option.value = article.id;
+            option.textContent = `${article.code} - ${article.name}`;
+            articleSelect.appendChild(option);
+        });
+        articleSelect.disabled = false;
+    } catch (error) {
+        console.error('Error loading articles:', error);
+    }
+}
+
+
+// Отмена массового выделения
+function cancelBatchSelection() {
+    selectedOperations.clear();
+    updateSelectedCount();
+
+    const selectAll = document.getElementById('selectAllCheckbox');
+    if (selectAll) selectAll.checked = false;
+    document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
+
+    // Сбрасываем форму
+    document.getElementById('batchBudgetId').value = '';
+    document.getElementById('batchSectionId').innerHTML = '<option value="">-- Сначала выберите смету --</option>';
+    document.getElementById('batchArticleId').innerHTML = '<option value="">-- Сначала выберите раздел --</option>';
+    document.getElementById('batchSectionId').disabled = true;
+    document.getElementById('batchArticleId').disabled = true;
+}
+
+
+let currentDocumentsOperationId = null;
+
+// Функция открытия модального окна с документами
+function openDocumentsModal(operationId) {
+    currentDocumentsOperationId = operationId;
+    const modal = document.getElementById('documentsModal');
+    const container = document.getElementById('documentsList');
+
+    container.innerHTML = '<p style="text-align: center; color: #666;">Загрузка документов...</p>';
+    modal.style.display = 'flex';
+
+    loadDocumentsList(operationId);
+}
+
+function closeDocumentsModal() {
+    document.getElementById('documentsModal').style.display = 'none';
+    currentDocumentsOperationId = null;
+}
+
+// Загрузка списка документов
+async function loadDocumentsList(operationId) {
+    try {
+        const response = await fetch(`/api/operations/${operationId}/documents`);
+        const documents = await response.json();
+
+        const container = document.getElementById('documentsList');
+
+        if (documents.length === 0) {
+            container.innerHTML = '<p style="text-align: center; color: #999;">📭 Нет прикрепленных документов</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+        documents.forEach(doc => {
+            const docDiv = document.createElement('div');
+            docDiv.className = 'document-item';
+            docDiv.innerHTML = `
+                <div class="document-info">
+                    <div class="document-name">📄 ${doc.original_filename}</div>
+                    <div class="document-meta">
+                        Приложение №${doc.attachment_number} | Загружен: ${doc.uploaded_at || ''}
+                    </div>
+                </div>
+                <div class="document-actions">
+                    <button onclick="viewDocument(${doc.id})" style="background: #17a2b8;">👁 Просмотр</button>
+                    <button onclick="deleteDocument(${doc.id}, ${operationId})" style="background: #dc3545;">🗑 Удалить</button>
+                </div>
+            `;
+            container.appendChild(docDiv);
+        });
+    } catch (error) {
+        console.error('Error loading documents:', error);
+        document.getElementById('documentsList').innerHTML = '<p style="text-align: center; color: red;">❌ Ошибка загрузки</p>';
+    }
+}
+
+// Загрузка документа
+async function uploadDocument() {
+    const fileInput = document.getElementById('uploadDocumentInput');
+    const file = fileInput.files[0];
+
+    if (!file) {
+        alert('Выберите файл');
+        return;
+    }
+
+    if (!file.name.endsWith('.pdf')) {
+        alert('Поддерживаются только PDF файлы');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('document', file);
+
+    try {
+        const response = await fetch(`/api/operations/${currentDocumentsOperationId}/documents`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            fileInput.value = '';
+            await loadDocumentsList(currentDocumentsOperationId);
+            await loadOperations(); // Обновляем таблицу для обновления иконки
+            alert('Документ успешно загружен');
+        } else {
+            alert(result.error || 'Ошибка загрузки');
+        }
+    } catch (error) {
+        console.error('Error uploading document:', error);
+        alert('Ошибка при загрузке документа');
+    }
+}
+
+// Просмотр документа
+function viewDocument(documentId) {
+    window.open(`/api/documents/${documentId}/view`, '_blank');
+}
+
+// Удаление документа
+async function deleteDocument(documentId, operationId) {
+    if (!confirm('Удалить этот документ?')) return;
+
+    try {
+        const response = await fetch(`/api/documents/${documentId}`, {
+            method: 'DELETE'
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            await loadDocumentsList(operationId);
+            await loadOperations(); // Обновляем таблицу для обновления иконки
+            alert('Документ удален');
+        } else {
+            alert(result.error || 'Ошибка удаления');
+        }
+    } catch (error) {
+        console.error('Error deleting document:', error);
+        alert('Ошибка при удалении документа');
+    }
+}
+
+// Обновление типа операции
+async function updateOperationType(operationId, operationType) {
+    try {
+        const response = await fetch(`/api/operations/${operationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ operation_type: operationType || null })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            const select = document.querySelector(`select[data-op-type="${operationId}"]`);
+            if (select) {
+                select.classList.add('saved');
+                setTimeout(() => select.classList.remove('saved'), 500);
+            }
+            // Обновляем данные в operationsData
+            const op = operationsData.find(o => o.id === operationId);
+            if (op) {
+                op.operation_type = operationType || null;
+            }
+        }
+    } catch (error) {
+        console.error('Error updating operation type:', error);
+    }
+}
+
+// Функция отрисовки таблицы (обновленная)
+function renderOperations(operations) {
+    console.log('renderOperations called with', operations.length, 'operations');
+
+    const tbody = document.getElementById('operationsBody');
+    if (!operations.length) {
+        const colspan = batchModeActive ? 12 : 11;
+        tbody.innerHTML = `<tr><td colspan="${colspan}" class="loading">📭 Нет операций для отображения</tr>`;
+        return;
+    }
+
+    tbody.innerHTML = '';
+
+    operations.forEach(op => {
+        const hasSplits = splitEditorState[op.id] !== undefined && splitEditorState[op.id].splits && splitEditorState[op.id].splits.length > 0;
+
+        const row = document.createElement('tr');
+        row.setAttribute('data-op-row', op.id);
+        row.style.borderBottom = '1px solid #eee';
+
+        // Чекбокс для массового редактирования
+        if (batchModeActive) {
+            const checkboxCell = document.createElement('td');
+            checkboxCell.className = 'checkbox-col';
+            checkboxCell.style.textAlign = 'center';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'row-checkbox';
+            checkbox.setAttribute('data-op-id', op.id);
+            checkbox.onchange = (e) => {
+                const opId = parseInt(e.target.getAttribute('data-op-id'));
+                if (e.target.checked) {
+                    selectedOperations.add(opId);
+                } else {
+                    selectedOperations.delete(opId);
+                    const selectAll = document.getElementById('selectAllCheckbox');
+                    if (selectAll) selectAll.checked = false;
+                }
+                updateSelectedCount();
+            };
+            checkboxCell.appendChild(checkbox);
+            row.appendChild(checkboxCell);
+        }
+
+        // Кнопка разделения
+        const splitCell = document.createElement('td');
+        splitCell.style.textAlign = 'center';
+        const splitBtn = document.createElement('button');
+        splitBtn.className = 'btn-split';
+        splitBtn.textContent = hasSplits ? '✂️ Закрыть' : '✂️ Разделить';
+        if (hasSplits) splitBtn.classList.add('active');
+        splitBtn.onclick = () => toggleSplitMode(op.id, splitBtn);
+        splitCell.appendChild(splitBtn);
+        row.appendChild(splitCell);
+
+        // Дата
+        const dateCell = document.createElement('td');
+        dateCell.textContent = op.date_display || '-';
+        dateCell.style.whiteSpace = 'nowrap';
+        row.appendChild(dateCell);
+
+        // Сумма
+        const amountCell = document.createElement('td');
+        amountCell.className = op.type_class;
+        amountCell.textContent = `${op.amount_display || '0.00'} ₽`;
+        amountCell.style.textAlign = 'right';
+        amountCell.style.fontWeight = 'bold';
+        amountCell.style.whiteSpace = 'nowrap';
+        row.appendChild(amountCell);
+
+        // Тип (доход/расход)
+        const typeCell = document.createElement('td');
+        typeCell.className = op.type_class;
+        typeCell.textContent = op.type || (op.debit_amount > 0 ? 'Расход' : 'Доход');
+        typeCell.style.whiteSpace = 'nowrap';
+        row.appendChild(typeCell);
+
+        // Тип операции (выпадающий список)
+        const opTypeCell = document.createElement('td');
+        const opTypeSelect = document.createElement('select');
+        opTypeSelect.className = 'operation-type-select';
+        opTypeSelect.setAttribute('data-op-type', op.id);
+        opTypeSelect.onchange = () => updateOperationType(op.id, opTypeSelect.value);
+
+        const opTypes = [
+            { value: 'null', label: '-- Не задан --' },
+            { value: 'payment', label: '💰 Оплата начисления' },
+            { value: 'expense', label: '📤 Расход' },
+            { value: 'refund', label: '🔄 Возврат' },
+            { value: 'deposit', label: '💵 Депозит' }
+        ];
+
+        opTypes.forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.label;
+            if (op.operation_type === opt.value) option.selected = true;
+            opTypeSelect.appendChild(option);
+        });
+        opTypeCell.appendChild(opTypeSelect);
+        row.appendChild(opTypeCell);
+
+        // Контрагент
+        const counterpartyCell = document.createElement('td');
+        counterpartyCell.className = 'cell-text';
+        counterpartyCell.textContent = op.counterparty || '-';
+        counterpartyCell.title = op.counterparty || '';
+        row.appendChild(counterpartyCell);
+
+        // Назначение
+        const purposeCell = document.createElement('td');
+        purposeCell.className = 'cell-text';
+        purposeCell.textContent = op.purpose || '-';
+        purposeCell.title = op.purpose || '';
+        row.appendChild(purposeCell);
+
+        // Смета, Раздел, Статья
+        if (hasSplits) {
+            const budgetCell = document.createElement('td');
+            budgetCell.innerHTML = '<span class="split-badge">🔀 Разделено</span>';
+            row.appendChild(budgetCell);
+
+            const sectionCell = document.createElement('td');
+            sectionCell.textContent = '—';
+            row.appendChild(sectionCell);
+
+            const articleCell = document.createElement('td');
+            articleCell.textContent = '—';
+            row.appendChild(articleCell);
+        } else {
+            // Смета
+            const budgetCell = document.createElement('td');
+            const budgetSelect = document.createElement('select');
+            budgetSelect.className = 'select-inline';
+            budgetSelect.setAttribute('data-op', op.id);
+            budgetSelect.setAttribute('data-field', 'budget_id');
+            budgetSelect.onchange = () => onBudgetChange(op.id, budgetSelect.value);
+
+            const defaultBudgetOption = document.createElement('option');
+            defaultBudgetOption.value = '';
+            defaultBudgetOption.textContent = '-- Без сметы --';
+            budgetSelect.appendChild(defaultBudgetOption);
+
+            for (const [id, budget] of Object.entries(budgetsData)) {
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = budget.name;
+                if (op.budget_id == id) option.selected = true;
+                budgetSelect.appendChild(option);
+            }
+            budgetCell.appendChild(budgetSelect);
+            row.appendChild(budgetCell);
+
+// Раздел
+const sectionCell = document.createElement('td');
+const sectionSelect = document.createElement('select');
+sectionSelect.className = 'select-inline';
+sectionSelect.setAttribute('data-op', op.id);
+sectionSelect.setAttribute('data-field', 'section_id');
+sectionSelect.onchange = () => onSectionChange(op.id, sectionSelect.value);
+sectionSelect.innerHTML = '<option value="">-- Загрузка... --</option>';
+sectionCell.appendChild(sectionSelect);
+row.appendChild(sectionCell);
+
+// Статья
+const articleCell = document.createElement('td');
+const articleSelect = document.createElement('select');
+articleSelect.className = 'select-inline';
+articleSelect.setAttribute('data-op', op.id);
+articleSelect.setAttribute('data-field', 'article_id');
+articleSelect.onchange = () => onArticleChange(op.id, articleSelect.value);
+articleSelect.innerHTML = '<option value="">-- Загрузка... --</option>';
+articleCell.appendChild(articleSelect);
+row.appendChild(articleCell);
+
+// Асинхронная загрузка разделов и статей
+(async () => {
+    // Загружаем разделы, если есть смета
+    if (op.budget_id) {
+        if (!sectionsData[op.budget_id]) {
+            try {
+                const response = await fetch(`/api/budgets/${op.budget_id}/sections`);
+                sectionsData[op.budget_id] = await response.json();
+            } catch (error) {
+                console.error('Error loading sections:', error);
+            }
+        }
+
+        sectionSelect.innerHTML = '<option value="">-- Выберите раздел --</option>';
+        sectionsData[op.budget_id].forEach(section => {
+            const option = document.createElement('option');
+            option.value = section.id;
+            option.textContent = `${section.code} - ${section.name}`;
+            if (op.section_id == section.id) option.selected = true;
+            sectionSelect.appendChild(option);
+        });
+
+        // Если есть выбранный раздел, загружаем статьи
+        if (op.section_id) {
+            if (!articlesData[op.section_id]) {
+                try {
+                    const response = await fetch(`/api/sections/${op.section_id}/articles`);
+                    articlesData[op.section_id] = await response.json();
+                } catch (error) {
+                    console.error('Error loading articles:', error);
+                    articlesData[op.section_id] = [];
+                }
+            }
+
+            articleSelect.innerHTML = '<option value="">-- Выберите статью --</option>';
+            articlesData[op.section_id].forEach(article => {
+                const option = document.createElement('option');
+                option.value = article.id;
+                option.textContent = `${article.code} - ${article.name}`;
+                if (op.article_id == article.id) option.selected = true;
+                articleSelect.appendChild(option);
+            });
+        } else {
+            articleSelect.innerHTML = '<option value="">-- Сначала выберите раздел --</option>';
+        }
+    } else {
+        sectionSelect.innerHTML = '<option value="">-- Сначала выберите смету --</option>';
+        articleSelect.innerHTML = '<option value="">-- Сначала выберите раздел --</option>';
+    }
+})();
+        }
+
+        // Документы (кнопка)
+        const docsCell = document.createElement('td');
+        docsCell.style.textAlign = 'center';
+        const docsBtn = document.createElement('button');
+        docsBtn.className = 'btn-split';
+        docsBtn.innerHTML = op.has_documents ? '' + op.documents_count : '0';
+        docsBtn.title = op.has_documents ? 'Управление документами' : 'Прикрепить документы';
+        docsBtn.style.background = op.has_documents ? '#28a745' : '#6c757d';
+        docsBtn.style.color = 'white';
+        docsBtn.onclick = () => openDocumentsModal(op.id);
+        docsCell.appendChild(docsBtn);
+        row.appendChild(docsCell);
+
+        tbody.appendChild(row);
+
+        // Если есть разделения, отображаем их строки
+        if (hasSplits && splitEditorState[op.id] && splitEditorState[op.id].splits) {
+            renderSplitRows(op.id, splitEditorState[op.id].splits);
+        }
+    });
+}
+
+// Обновленная функция applyBatchUpdate
+async function applyBatchUpdate() {
+    const operationType = document.getElementById('batchOperationType').value;
+    const budgetId = document.getElementById('batchBudgetId').value;
+    const sectionId = document.getElementById('batchSectionId').value;
+    const articleId = document.getElementById('batchArticleId').value;
+
+    if (!operationType && !articleId) {
+        alert('Выберите тип операции или статью сметы для применения');
+        return;
+    }
+
+    if (selectedOperations.size === 0) {
+        alert('Нет выбранных операций');
+        return;
+    }
+
+    const updates = {};
+    if (operationType) updates.operation_type = operationType;
+    if (articleId) {
+        updates.budget_id = budgetId || null;
+        updates.section_id = sectionId || null;
+        updates.article_id = parseInt(articleId);
+    }
+
+    if (!confirm(`Применить изменения к ${selectedOperations.size} операциям?`)) {
+        return;
+    }
+
+    const operationIds = Array.from(selectedOperations);
+
+    try {
+        let successCount = 0;
+        for (const opId of operationIds) {
+            const response = await fetch(`/api/operations/${opId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updates)
+            });
+
+            if (response.ok) {
+                successCount++;
+            }
+        }
+
+        alert(`✅ Обновлено ${successCount} из ${operationIds.length} операций`);
+
+        // Очищаем выбор и перезагружаем данные
+        selectedOperations.clear();
+        updateSelectedCount();
+
+        // Сбрасываем форму
+        document.getElementById('batchOperationType').value = '';
+        document.getElementById('batchBudgetId').value = '';
+        document.getElementById('batchSectionId').innerHTML = '<option value="">-- Сначала выберите смету --</option>';
+        document.getElementById('batchArticleId').innerHTML = '<option value="">-- Сначала выберите раздел --</option>';
+        document.getElementById('batchSectionId').disabled = true;
+        document.getElementById('batchArticleId').disabled = true;
+
+        // Снимаем выделение
+        const selectAll = document.getElementById('selectAllCheckbox');
+        if (selectAll) selectAll.checked = false;
+        document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
+
+        // Перезагружаем операции
+        await loadOperations();
+
+    } catch (error) {
+        console.error('Error in batch update:', error);
+        alert('Ошибка при массовом обновлении');
+    }
+}
+
+function isValidDate(dateStr) {
+    if (!dateStr) return true;
+    const regex = /^(\d{2})\.(\d{2})\.(\d{4})$/;
+    if (!regex.test(dateStr)) return false;
+
+    const day = parseInt(RegExp.$1);
+    const month = parseInt(RegExp.$2);
+    const year = parseInt(RegExp.$3);
+
+    const date = new Date(year, month - 1, day);
+    return date.getFullYear() === year &&
+           date.getMonth() === month - 1 &&
+           date.getDate() === day;
+}
+
+// Загрузка операций
+// Загрузка операций
+async function loadOperations() {
+    console.log('loadOperations called');
+
+    const params = new URLSearchParams();
+
+    // Получаем даты в формате ДД.ММ.ГГГГ
+    let startDate = document.getElementById('filterStartDate')?.value || '';
+    let endDate = document.getElementById('filterEndDate')?.value || '';
+
+    // Валидируем и преобразуем даты для API
+    if (startDate) {
+        params.append('start_date', startDate);
+    }
+
+    if (endDate) {
+            params.append('end_date', endDate);
+    }
+
+    const counterparty = document.getElementById('filterCounterparty')?.value || '';
+    const transactionType = document.getElementById('filterTransactionType')?.value || '';
+    const purposeSearch = document.getElementById('filterPurpose')?.value || '';
+    const budgetId = document.getElementById('filterBudget')?.value || '';
+    const operationType = document.getElementById('filterOperationType')?.value || '';
+    const hasDocuments = document.getElementById('filterHasDocuments')?.value || '';
+
+    if (counterparty && counterparty !== '') params.append('counterparty', counterparty);
+    if (transactionType && transactionType !== '') params.append('transaction_type', transactionType);
+    if (purposeSearch && purposeSearch !== '') params.append('purpose_search', purposeSearch);
+    if (budgetId && budgetId !== '') {
+        if (budgetId === 'null') {
+            params.append('budget_id', 'null');
+        } else {
+            params.append('budget_id', budgetId);
+        }
+    }
+    if (operationType && operationType !== '') {
+        if (operationType === 'null') {
+            params.append('operation_type', 'null');
+        } else {
+            params.append('operation_type', operationType);
+        }
+    }
+    if (hasDocuments && hasDocuments !== '') {
+        params.append('has_documents', hasDocuments);
+    }
+
+    try {
+        const response = await fetch('/api/operations?' + params.toString());
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+        const operations = await response.json();
+        console.log('Received operations:', operations.length);
+
+        operationsData = operations;
+        splitEditorState = {};
+
+        renderOperations(operations);
+        updateStats(operations);
+
+        for (const op of operations) {
+            if (op.is_split) {
+                await loadSplitsForOperation(op.id);
+            }
+        }
+
+        if (batchModeActive) {
+            document.querySelectorAll('.row-checkbox').forEach(cb => {
+                const opId = parseInt(cb.getAttribute('data-op-id'));
+                if (selectedOperations.has(opId)) cb.checked = true;
+            });
+            updateSelectedCount();
+        }
+    } catch (error) {
+        console.error('Error loading operations:', error);
+        const colspan = batchModeActive ? 13 : 12;
+        document.getElementById('operationsBody').innerHTML = `<tr><td colspan="${colspan}" class="loading">❌ Ошибка загрузки операций: ${error.message}</td></tr>`;
+    }
+}
+
+
+let availableDocuments = [];
+
+// Функция открытия модального окна с документами
+function openDocumentsModal(operationId) {
+    currentDocumentsOperationId = operationId;
+    const modal = document.getElementById('documentsModal');
+    modal.style.display = 'flex';
+
+    loadAttachedDocuments(operationId);
+    loadAvailableDocuments();
+}
+
+function closeDocumentsModal() {
+    document.getElementById('documentsModal').style.display = 'none';
+    currentDocumentsOperationId = null;
+}
+
+// Загрузка прикрепленных документов
+async function loadAttachedDocuments(operationId) {
+    try {
+        const response = await fetch(`/api/operations/${operationId}/library_documents`);
+        const documents = await response.json();
+        const container = document.getElementById('attachedDocumentsList');
+
+        if (!documents.length) {
+            container.innerHTML = '<p style="text-align: center; color: #999;">📭 Нет прикрепленных документов</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+        documents.forEach(doc => {
+            const docDiv = document.createElement('div');
+            docDiv.className = 'document-item';
+            docDiv.innerHTML = `
+                <div class="document-info">
+                    <div class="document-name">📄 ${escapeHtml(doc.name)}</div>
+                    <div class="document-meta">
+                        Файл: ${escapeHtml(doc.original_filename)}<br>
+                        Прикреплен: ${doc.attached_at || ''}
+                        ${doc.note ? `<br>Примечание: ${escapeHtml(doc.note)}` : ''}
+                    </div>
+                </div>
+                <div class="document-actions">
+                    <button onclick="viewLibraryDocument(${doc.id})" style="background: #17a2b8;">👁 Просмотр</button>
+                    <button onclick="detachDocument(${operationId}, ${doc.id})" style="background: #dc3545;">🗑 Открепить</button>
+                </div>
+            `;
+            container.appendChild(docDiv);
+        });
+    } catch (error) {
+        console.error('Error loading attached documents:', error);
+        document.getElementById('attachedDocumentsList').innerHTML = '<p style="text-align: center; color: red;">❌ Ошибка загрузки</p>';
+    }
+}
+
+// Загрузка доступных документов из библиотеки
+async function loadAvailableDocuments() {
+    const searchTerm = document.getElementById('searchAvailableDocs').value.toLowerCase();
+
+    try {
+        const response = await fetch(`/api/operations/${currentDocumentsOperationId}/documents/available`);
+        let documents = await response.json();
+
+        // Фильтрация по поиску
+        if (searchTerm) {
+            documents = documents.filter(doc =>
+                doc.name.toLowerCase().includes(searchTerm) ||
+                (doc.description && doc.description.toLowerCase().includes(searchTerm)) ||
+                (doc.tags && doc.tags.toLowerCase().includes(searchTerm))
+            );
+        }
+
+        availableDocuments = documents;
+        const container = document.getElementById('availableDocumentsList');
+
+        if (documents.length === 0) {
+            container.innerHTML = '<p style="text-align: center; color: #999;">📭 Нет доступных документов</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+        documents.forEach(doc => {
+            const docDiv = document.createElement('div');
+            docDiv.className = 'document-item';
+            docDiv.innerHTML = `
+                <div class="document-info">
+                    <div class="document-name">📄 ${escapeHtml(doc.name)}</div>
+                    <div class="document-meta">
+                        Файл: ${doc.original_filename}
+                        ${doc.description ? `<br>📝 ${escapeHtml(doc.description)}` : ''}
+                        ${doc.tags ? `<br>🏷 ${escapeHtml(doc.tags)}` : ''}
+                    </div>
+                </div>
+                <div class="document-actions">
+                    <button onclick="viewLibraryDocument(${doc.id})" style="background: #17a2b8;">👁 Просмотр</button>
+                    <button onclick="attachDocument(${currentDocumentsOperationId}, ${doc.id})" style="background: #28a745;">📎 Прикрепить</button>
+                </div>
+            `;
+            container.appendChild(docDiv);
+        });
+    } catch (error) {
+        console.error('Error loading available documents:', error);
+    }
+}
+
+
+// Открепить документ от операции
+async function detachDocument(operationId, documentId) {
+    if (!confirm('Открепить этот документ от операции?')) return;
+
+    try {
+        const response = await fetch(`/api/operations/${operationId}/library_documents/${documentId}`, {
+            method: 'DELETE'
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            await loadAttachedDocuments(operationId);
+            await loadAvailableDocuments();
+            await loadOperations(); // Обновляем таблицу
+            alert('Документ откреплен');
+        } else {
+            alert(result.error);
+        }
+    } catch (error) {
+        console.error('Error detaching document:', error);
+        alert('Ошибка при откреплении');
+    }
+}
+
+// Просмотр документа из библиотеки
+function viewLibraryDocument(documentId) {
+    window.open(`/api/documents_library/${documentId}/view`, '_blank');
+}
+
+async function uploadDirectDocument() {
+    const fileInput = document.getElementById('uploadDocumentInput');
+    const file = fileInput?.files[0];
+
+    if (!file) {
+        alert('Выберите файл');
+        return;
+    }
+
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+        alert('Поддерживаются только PDF файлы');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('document', file);
+
+    try {
+        const response = await fetch(`/api/operations/${currentDocumentsOperationId}/documents/direct`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            fileInput.value = '';
+            await loadAttachedDocuments(currentDocumentsOperationId);
+            await loadOperations(); // Обновляем таблицу для обновления иконки
+            alert('Документ успешно прикреплен к операции');
+        } else {
+            alert(result.error || 'Ошибка загрузки');
+        }
+    } catch (error) {
+        console.error('Error uploading direct document:', error);
+        alert('Ошибка при загрузке документа');
+    }
+}
+
+// Функция для загрузки документа в библиотеку (оставляем для совместимости)
+async function uploadNewDocument() {
+    const fileInput = document.getElementById('uploadDocumentInput');
+    const nameInput = document.getElementById('newDocumentName');
+    const file = fileInput?.files[0];
+    const name = nameInput?.value;
+
+    if (!file || !name) {
+        alert('Выберите файл и укажите название документа');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('document', file);
+    formData.append('description', '');
+    formData.append('tags', '');
+
+    try {
+        const response = await fetch('/api/documents_library', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await response.json();
+        if (result.success) {
+            fileInput.value = '';
+            nameInput.value = '';
+            await loadAvailableDocuments();
+            alert('Документ загружен в библиотеку');
+        } else {
+            alert(result.error);
+        }
+    } catch (error) {
+        console.error('Error uploading document:', error);
+        alert('Ошибка при загрузке');
+    }
+}
+
+// Прикрепление документа из библиотеки
+async function attachDocument(operationId, documentId) {
+    try {
+        const response = await fetch(`/api/operations/${operationId}/library_documents`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ document_id: documentId, note: '' })
+        });
+        const result = await response.json();
+        if (result.success) {
+            await loadAttachedDocuments(operationId);
+            await loadAvailableDocuments();
+            await loadOperations();
+            alert('Документ прикреплен');
+        } else {
+            alert(result.error);
+        }
+    } catch (error) {
+        console.error('Error attaching document:', error);
+        alert('Ошибка при прикреплении');
+    }
+}
+
+// Функция escapeHtml для безопасности
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Добавляем поиск с задержкой
+let searchTimeout;
+document.getElementById('searchAvailableDocs')?.addEventListener('input', () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => loadAvailableDocuments(), 300);
+});
+
+// Загрузка личных документов операции
+async function loadPersonalDocuments(operationId) {
+    try {
+        const response = await fetch(`/api/operations/${operationId}/documents/personal`);
+        const documents = await response.json();
+        const container = document.getElementById('personalDocumentsList');
+
+        if (!documents.length) {
+            container.innerHTML = '<p style="text-align: center; color: #999;">📭 Нет личных документов</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+        documents.forEach(doc => {
+            const docDiv = document.createElement('div');
+            docDiv.className = 'document-item';
+            docDiv.innerHTML = `
+                <div class="document-info">
+                    <div class="document-name">📄 ${escapeHtml(doc.name)}</div>
+                    <div class="document-meta">
+                        Файл: ${escapeHtml(doc.original_filename)}<br>
+                        Прикреплен: ${doc.attached_at || ''}
+                        ${doc.description ? `<br>📝 ${escapeHtml(doc.description)}` : ''}
+                    </div>
+                </div>
+                <div class="document-actions">
+                    <button onclick="viewLibraryDocument(${doc.id})" style="background: #17a2b8;">👁 Просмотр</button>
+                    <button onclick="detachDocument(${operationId}, ${doc.id})" style="background: #dc3545;">🗑 Открепить</button>
+                </div>
+            `;
+            container.appendChild(docDiv);
+        });
+    } catch (error) {
+        console.error('Error loading personal documents:', error);
+        document.getElementById('personalDocumentsList').innerHTML = '<p style="text-align: center; color: red;">❌ Ошибка загрузки</p>';
+    }
+}
+
+// Загрузка доступных общих документов из библиотеки
+async function loadAttachedDocuments(operationId) {
+    try {
+        // Получаем все прикрепленные документы к операции
+        const response = await fetch(`/api/operations/${operationId}/library_documents`);
+        const documents = await response.json();
+        const container = document.getElementById('attachedDocumentsList');
+
+        // Проверяем, существует ли элемент
+        if (!container) {
+            console.error('Element attachedDocumentsList not found');
+            return;
+        }
+
+        if (!documents.length) {
+            container.innerHTML = '<p style="text-align: center; color: #999;">📭 Нет прикрепленных документов</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+        documents.forEach(doc => {
+            const docDiv = document.createElement('div');
+            docDiv.className = 'document-item';
+            docDiv.innerHTML = `
+                <div class="document-info">
+                    <div class="document-name">📄 ${escapeHtml(doc.name)}</div>
+                    <div class="document-meta">
+                        Файл: ${escapeHtml(doc.original_filename)}<br>
+                        Прикреплен: ${doc.attached_at || ''}
+                        ${doc.note ? `<br>Примечание: ${escapeHtml(doc.note)}` : ''}
+                    </div>
+                </div>
+                <div class="document-actions">
+                    <button onclick="viewLibraryDocument(${doc.id})" style="background: #17a2b8;">👁 Просмотр</button>
+                    <button onclick="detachDocument(${operationId}, ${doc.id})" style="background: #dc3545;">🗑 Открепить</button>
+                </div>
+            `;
+            container.appendChild(docDiv);
+        });
+    } catch (error) {
+        console.error('Error loading attached documents:', error);
+        const container = document.getElementById('attachedDocumentsList');
+        if (container) {
+            container.innerHTML = '<p style="text-align: center; color: red;">❌ Ошибка загрузки</p>';
+        }
+    }
+}
+
+// Загрузка доступных документов из библиотеки
+async function loadAvailableDocuments() {
+    const searchTerm = document.getElementById('searchAvailableDocs')?.value.toLowerCase() || '';
+    try {
+        const response = await fetch(`/api/operations/${currentDocumentsOperationId}/documents/available`);
+        let documents = await response.json();
+
+        const container = document.getElementById('availableDocumentsList');
+        if (!container) {
+            console.error('Element availableDocumentsList not found');
+            return;
+        }
+
+        if (searchTerm) {
+            documents = documents.filter(doc =>
+                doc.name.toLowerCase().includes(searchTerm) ||
+                (doc.description && doc.description.toLowerCase().includes(searchTerm)) ||
+                (doc.tags && doc.tags.toLowerCase().includes(searchTerm))
+            );
+        }
+
+        availableDocuments = documents;
+
+        if (!documents.length) {
+            container.innerHTML = '<p style="text-align: center; color: #999;">📭 Нет доступных документов в библиотеке</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+        documents.forEach(doc => {
+            const docDiv = document.createElement('div');
+            docDiv.className = 'document-item';
+            docDiv.innerHTML = `
+                <div class="document-info">
+                    <div class="document-name">📄 ${escapeHtml(doc.name)}</div>
+                    <div class="document-meta">
+                        Файл: ${escapeHtml(doc.original_filename)}<br>
+                        Использований: ${doc.usage_count || 0}
+                        ${doc.description ? `<br>📝 ${escapeHtml(doc.description)}` : ''}
+                        ${doc.tags ? `<br>🏷 ${escapeHtml(doc.tags)}` : ''}
+                    </div>
+                </div>
+                <div class="document-actions">
+                    <button onclick="viewLibraryDocument(${doc.id})" style="background: #17a2b8;">👁 Просмотр</button>
+                    <button onclick="attachDocument(${currentDocumentsOperationId}, ${doc.id})" style="background: #28a745;">📎 Прикрепить</button>
+                </div>
+            `;
+            container.appendChild(docDiv);
+        });
+    } catch (error) {
+        console.error('Error loading available documents:', error);
+        const container = document.getElementById('availableDocumentsList');
+        if (container) {
+            container.innerHTML = '<p style="text-align: center; color: red;">❌ Ошибка загрузки</p>';
+        }
+    }
+}
+
+// Функция для прямой загрузки документа к операции
+async function uploadDirectDocument() {
+    const fileInput = document.getElementById('uploadDocumentInput');
+    const file = fileInput?.files[0];
+
+    if (!file) {
+        alert('Выберите файл');
+        return;
+    }
+
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+        alert('Поддерживаются только PDF файлы');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('document', file);
+
+    try {
+        const response = await fetch(`/api/operations/${currentDocumentsOperationId}/documents/direct`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            fileInput.value = '';
+            await loadAttachedDocuments(currentDocumentsOperationId);
+            await loadAvailableDocuments();
+            await loadOperations();
+            alert('Документ успешно прикреплен к операции');
+        } else {
+            alert(result.error || 'Ошибка загрузки');
+        }
+    } catch (error) {
+        console.error('Error uploading direct document:', error);
+        alert('Ошибка при загрузке документа');
+    }
+}
+
+// Функция открытия модального окна
+function openDocumentsModal(operationId) {
+    currentDocumentsOperationId = operationId;
+    const modal = document.getElementById('documentsModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        loadAttachedDocuments(operationId);
+        loadAvailableDocuments();
+    } else {
+        console.error('Modal element not found');
+    }
+}
+
+// Функция закрытия модального окна
+function closeDocumentsModal() {
+    const modal = document.getElementById('documentsModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    currentDocumentsOperationId = null;
+}
+
+// Убедитесь, что функция escapeHtml определена
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+    // Генерация отчета с текущими фильтрами
+async function generateReport() {
+    // Собираем текущие фильтры
+    const params = new URLSearchParams();
+
+    let startDate = document.getElementById('filterStartDate')?.value || '';
+    let endDate = document.getElementById('filterEndDate')?.value || '';
+    const counterparty = document.getElementById('filterCounterparty')?.value || '';
+    const transactionType = document.getElementById('filterTransactionType')?.value || '';
+    const purposeSearch = document.getElementById('filterPurpose')?.value || '';
+    const budgetId = document.getElementById('filterBudget')?.value || '';
+    const operationType = document.getElementById('filterOperationType')?.value || '';
+    const hasDocuments = document.getElementById('filterHasDocuments')?.value || '';
+
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    if (counterparty && counterparty !== '') params.append('counterparty', counterparty);
+    if (transactionType && transactionType !== '') params.append('transaction_type', transactionType);
+    if (purposeSearch && purposeSearch !== '') params.append('purpose_search', purposeSearch);
+    if (budgetId && budgetId !== '') {
+        if (budgetId === 'null') {
+            params.append('budget_id', 'null');
+        } else {
+            params.append('budget_id', budgetId);
+        }
+    }
+    if (operationType && operationType !== '') {
+        if (operationType === 'null') {
+            params.append('operation_type', 'null');
+        } else {
+            params.append('operation_type', operationType);
+        }
+    }
+    if (hasDocuments && hasDocuments !== '') {
+        params.append('has_documents', hasDocuments);
+    }
+
+    // Показываем индикатор загрузки
+    const reportBtn = event.target;
+    const originalText = reportBtn.textContent;
+    reportBtn.textContent = '⏳ Формирование...';
+    reportBtn.disabled = true;
+
+    try {
+        const response = await fetch('/api/generate_operations_report?' + params.toString());
+
+        if (!response.ok) {
+            throw new Error('Ошибка при формировании отчета');
+        }
+
+        // Получаем blob с PDF
+        const blob = await response.blob();
+
+        // Создаем ссылку для скачивания
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `отчет_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+    } catch (error) {
+        console.error('Error generating report:', error);
+        alert('Ошибка при формировании отчета: ' + error.message);
+    } finally {
+        reportBtn.textContent = originalText;
+        reportBtn.disabled = false;
+    }
+}
+</script>
+
+{% endblock %}

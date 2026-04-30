@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="stats" id="stats">
+    <div class="stat-card">
+        <div class="stat-number" id="totalOps">-</div>
+        <div class="stat-label">Всего операций</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number" id="classified">-</div>
+        <div class="stat-label">Классифицировано</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number" id="withDocs">-</div>
+        <div class="stat-label">С приложениями</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number" id="percent">-</div>
+        <div class="stat-label">% классификации</div>
+    </div>
+</div>
+
+<div style="text-align: center; padding: 40px;">
+    <h2>Добро пожаловать в систему учета банковских выписок</h2>
+    <p style="margin: 20px 0; color: #666;">Загружайте выписки, назначайте статьи сметы, прикрепляйте документы и формируйте отчеты</p>
+    <a href="{{ url_for('statements') }}" class="button">Начать работу →</a>
+</div>
+
+<script>
+    fetch('/api/statistics')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('totalOps').textContent = data.total_operations;
+            document.getElementById('classified').textContent = data.total_with_article;
+            document.getElementById('withDocs').textContent = data.total_with_docs;
+            document.getElementById('percent').textContent = data.percent_classified + '%';
+        });
+</script>
+{% endblock %}

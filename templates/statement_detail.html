@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>📄 Детали операции</h2>
+
+<div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
+    <p><strong>Дата:</strong> {{ operation.transaction_date.strftime('%d.%m.%Y %H:%M') }}</p>
+    <p><strong>Сумма:</strong> {{ "{:,.2f}".format(operation.debit_amount if operation.debit_amount > 0 else operation.credit_amount) }} ₽</p>
+    <p><strong>Тип:</strong> <span style="color: {% if operation.debit_amount > 0 %}red{% else %}green{% endif %}">{{ 'Расход' if operation.debit_amount > 0 else 'Доход' }}</span></p>
+    <p><strong>Назначение:</strong> {{ operation.purpose }}</p>
+    <p><strong>Контрагент:</strong> {{ operation.counterparty }}</p>
+    <p><strong>Банк:</strong> {{ operation.bank_name }}</p>
+    <p><strong>Номер документа:</strong> {{ operation.doc_number }}</p>
+</div>
+
+<h3>🏷 Статья сметы</h3>
+<form method="POST" action="{{ url_for('update_operation', operation_id=operation.id) }}" style="margin: 20px 0;">
+    <select name="article_id">
+        <option value="">-- Не выбрана --</option>
+        {% for article in articles %}
+        <option value="{{ article.id }}" {% if operation.article_id == article.id %}selected{% endif %}>
+            {{ article.code }} - {{ article.name }}
+        </option>
+        {% endfor %}
+    </select>
+    <button type="submit">Сохранить</button>
+</form>
+
+<h3>📎 Прикрепленные документы</h3>
+{% if operation.documents %}
+<table>
+    <thead>
+        <tr><th>№ приложения</th><th>Файл</th><th>Дата загрузки</th><th>Действия</th></tr>
+    </thead>
+    <tbody>
+        {% for doc in operation.documents %}
+        <tr>
+            <td>Приложение {{ doc.attachment_number }}</td>
+            <td>{{ doc.original_filename }}</td>
+            <td>{{ doc.uploaded_at.strftime('%d.%m.%Y %H:%M') }}</td>
+            <td><a href="{{ url_for('delete_document', document_id=doc.id) }}" onclick="return confirm('Удалить документ?')">Удалить</a></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>Нет прикрепленных документов</p>
+{% endif %}
+
+<h3>📤 Загрузить документ (PDF)</h3>
+<form method="POST" action="{{ url_for('upload_document', operation_id=operation.id) }}" enctype="multipart/form-data" style="margin: 20px 0;">
+    <input type="file" name="document" accept=".pdf" required>
+    <button type="submit">Загрузить</button>
+</form>
+
+<a href="{{ url_for('statements') }}" class="button">← Назад к списку</a>
+{% endblock %}

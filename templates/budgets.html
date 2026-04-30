@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>📋 Сметы</h2>
+
+<form method="POST" action="{{ url_for('add_budget') }}" style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+    <div style="display: grid; grid-template-columns: 2fr 1fr 2fr auto; gap: 10px;">
+        <input type="text" name="name" placeholder="Название сметы" required>
+        <input type="number" name="year" placeholder="Год">
+        <input type="text" name="description" placeholder="Описание">
+        <button type="submit">Добавить</button>
+    </div>
+</form>
+
+<table>
+    <thead>
+        <tr><th>Название</th><th>Год</th><th>Описание</th><th>Разделов</th><th>Статус</th><th>Действия</th></tr>
+    </thead>
+    <tbody>
+        {% for b in budgets %}
+        <tr>
+            <td>{{ b.name }}</td>
+            <td>{{ b.year or '-' }}</td>
+            <td>{{ b.description or '-' }}</td>
+            <td>{{ b.sections|length }}</td>
+            <td style="color: {% if b.is_active %}green{% else %}red{% endif %}">
+                {{ 'Активна' if b.is_active else 'Неактивна' }}
+            </td>
+            <td>
+                <a href="{{ url_for('budget_sections', budget_id=b.id) }}">Разделы</a>
+                {% if b.is_active %}
+                | <a href="{{ url_for('delete_budget', budget_id=b.id) }}" onclick="return confirm('Деактивировать смету?')">Деактивировать</a>
+                {% endif %}
+             </td>
+         </tr>
+        {% else %}
+        <tr><td colspan="6">Нет смет</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
