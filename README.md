@@ -1,4 +1,4 @@
-# 🏦 TSNFinance — Учёт банковских выписок и смет
+# 🏦 TSNFinance — Учёт банковских выписок и смет ТСН
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-2.3.3-black?logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
