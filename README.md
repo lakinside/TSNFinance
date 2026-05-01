@@ -19,13 +19,16 @@
 
 ## 🖼️ Скриншоты
 
-| Страница операций | 
-|:---:|:---:|
-| ![Операции](screenshots/operations.png) |
+ Страница операций 
 
-| Библиотека документов | Сформированный отчёт |
-|:---:|:---:|
-| ![Документы](screenshots/documents.png) | ![Отчёт](screenshots/report.png) |
+ ![Операции](screenshots/operations.png) 
+
+Библиотека документов 
+
+![Документы](screenshots/documents.png) 
+
+Сформированный отчёт 
+![Отчёт](screenshots/report.png)
 
 ## 🚀 Быстрый старт
 
