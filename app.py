@@ -5,6 +5,7 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
 from models import db, Budget, BudgetSection, BudgetArticle, Operation, Document, StatementImport, SplitOperation, DocumentLibrary, OperationDocumentLink
+import threading
 import uuid
 from transliterate import translit
 from datetime import timedelta
@@ -23,6 +24,10 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import PyPDF2
 from PyPDF2 import PdfReader, PdfWriter
+
+task_status = {}
+
+import sys
 
 # Или используйте простую функцию без транслитерации
 def generate_safe_filename(original_filename):
@@ -72,7 +77,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///bank_statement.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['REPORT_FOLDER'] = 'reports'
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max
 
 # Создание необходимых папок
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -1236,7 +1242,9 @@ def upload_operation_document(operation_id):
 def view_document(document_id):
     """Просмотр документа"""
     document = Document.query.get_or_404(document_id)
-    return send_file(document.file_path, as_attachment=False)
+    actual_file_path = doc.file_path.replace('/root/finance/uploads/',
+                                             'C:\\Users\\lahturov.IS_HQ\\PycharmProjects\\TSNFinance\\uploads\\')
+    return send_file(actual_file_path, as_attachment=False)
 
 
 @app.route('/api/documents/<int:document_id>', methods=['DELETE'])
@@ -1301,7 +1309,9 @@ def api_delete_document(document_id):
 def api_view_document(document_id):
     """Просмотр документа из библиотеки"""
     document = DocumentLibrary.query.get_or_404(document_id)
-    return send_file(document.file_path, as_attachment=False)
+    actual_file_path = document.file_path.replace('/root/finance/uploads/',
+                                             'C:\\Users\\lahturov.IS_HQ\\PycharmProjects\\TSNFinance\\uploads\\')
+    return send_file(actual_file_path, as_attachment=False)
 
 
 # ========== Прикрепление документов к операциям ==========
@@ -1576,10 +1586,8 @@ def get_russian_style(base_style, font_name='DejaVuSans', size=10):
         )
     return base_style
 
-
-@app.route('/api/generate_operations_report')
-def generate_operations_report():
-    """Генерация PDF отчета с операциями и приложениями"""
+def generate_report_async(task_id, params):
+    """Асинхронная генерация отчета (с контекстом приложения)"""
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
@@ -1591,368 +1599,506 @@ def generate_operations_report():
     import os
     import io
     from PyPDF2 import PdfReader, PdfWriter
+    import fitz
+    import shutil
 
-    # Регистрируем шрифт для кириллицы
-    font_path = os.path.join(os.path.dirname(__file__), 'fonts', 'DejaVuSans.ttf')
-    if os.path.exists(font_path):
-        pdfmetrics.registerFont(TTFont('DejaVuSans', font_path))
-        pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', font_path))
-        has_cyrillic = True
-    else:
-        alt_font_path = 'C:/Windows/Fonts/arial.ttf'
-        if os.path.exists(alt_font_path):
-            pdfmetrics.registerFont(TTFont('Arial', alt_font_path))
-            pdfmetrics.registerFont(TTFont('Arial-Bold', alt_font_path))
-            has_cyrillic = True
-        else:
-            has_cyrillic = False
-
-    # Получаем параметры фильтрации
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    counterparty = request.args.get('counterparty')
-    transaction_type = request.args.get('transaction_type')
-    purpose_search = request.args.get('purpose_search')
-    budget_id = request.args.get('budget_id')
-    operation_type = request.args.get('operation_type')
-    has_documents_filter = request.args.get('has_documents')
-
-    query = Operation.query
-
-    if start_date:
-        query = query.filter(Operation.transaction_date >= datetime.strptime(start_date, '%Y-%m-%d'))
-    if end_date:
-        query = query.filter(Operation.transaction_date <= datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1))
-    if counterparty and counterparty != '':
-        query = query.filter(Operation.counterparty == counterparty)
-    if transaction_type and transaction_type != '':
-        if transaction_type == 'income':
-            query = query.filter(Operation.credit_amount > 0)
-        elif transaction_type == 'expense':
-            query = query.filter(Operation.debit_amount > 0)
-    if purpose_search and purpose_search != '':
-        query = query.filter(Operation.purpose.ilike(f'%{purpose_search}%'))
-    if budget_id and budget_id != '':
-        if budget_id == 'null':
-            query = query.filter(Operation.budget_id.is_(None))
-        else:
-            query = query.filter(Operation.budget_id == int(budget_id))
-    if operation_type and operation_type != '':
-        if operation_type == 'null':
-            query = query.filter(Operation.operation_type.is_(None))
-        else:
-            query = query.filter(Operation.operation_type == operation_type)
-    if has_documents_filter and has_documents_filter != '':
-        if has_documents_filter == 'yes':
-            query = query.filter(Operation.id.in_(
-                db.session.query(OperationDocumentLink.operation_id).distinct()
-            ))
-        elif has_documents_filter == 'no':
-            query = query.filter(~Operation.id.in_(
-                db.session.query(OperationDocumentLink.operation_id).distinct()
-            ))
-
-    operations = query.order_by(Operation.transaction_date).all()
-
-    if not operations:
-        return jsonify({'error': 'Нет операций для отчета'}), 404
-
-    # Создаем временный файл для основного отчета
-    temp_dir = tempfile.mkdtemp()
-
-    # Собираем все уникальные документы (один документ - один раз)
-    unique_docs = {}  # {document_id: doc_info}
-    operation_apps = {}  # {operation_id: [doc_numbers]}
-
-    for op in operations:
-        operation_apps[op.id] = []
-        if hasattr(op, 'library_documents'):
-            for link in op.library_documents:
-                doc = link.document
-                if os.path.exists(doc.file_path):
-                    # Если документ еще не добавлен, добавляем его с новым номером
-                    if doc.id not in unique_docs:
-                        unique_docs[doc.id] = {
-                            'number': len(unique_docs) + 1,
-                            'path': doc.file_path,
-                            'name': doc.name,
-                            'operation_id': op.id,
-                            'original_filename': doc.original_filename
-                        }
-                    # Добавляем номер приложения к операции
-                    doc_number = unique_docs[doc.id]['number']
-                    if doc_number not in operation_apps[op.id]:
-                        operation_apps[op.id].append(doc_number)
-
-    # Преобразуем unique_docs в список для удобства
-    all_docs = list(unique_docs.values())
-
-    # Загружаем все разделения для операций
-    splits_data = {}
-    for op in operations:
-        splits = SplitOperation.query.filter_by(parent_operation_id=op.id).all()
-        if splits:
-            splits_data[op.id] = splits
-
-    # ========== ЧАСТЬ 1: Создаем основной отчет с таблицей ==========
-    report_path = os.path.join(temp_dir, 'report.pdf')
-
-    # Минимальные поля: 8mm со всех сторон
-    doc = SimpleDocTemplate(report_path, pagesize=landscape(A4),
-                            topMargin=8 * mm, bottomMargin=8 * mm,
-                            leftMargin=8 * mm, rightMargin=8 * mm)
-
-    page_width, page_height = landscape(A4)
-    available_width = page_width - (8 * mm * 2)
-
-    # Создаем стили
-    styles = getSampleStyleSheet()
-
-    if has_cyrillic:
-        font_name = 'DejaVuSans' if os.path.exists(font_path) else 'Arial'
-        font_bold = 'DejaVuSans-Bold' if os.path.exists(font_path) else 'Arial-Bold'
-
-        table_style = ParagraphStyle('TableStyle', parent=styles['Normal'], fontName=font_name, fontSize=7,
-                                     encoding='utf-8', leading=9)
-        header_style = ParagraphStyle('HeaderStyle', parent=styles['Normal'], fontName=font_bold, fontSize=8,
-                                      textColor=colors.whitesmoke, alignment=1, encoding='utf-8')
-        normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontName=font_name, fontSize=9,
-                                      encoding='utf-8')
-        title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontName=font_bold, fontSize=14,
-                                     alignment=1, spaceAfter=20, encoding='utf-8')
-        split_style = ParagraphStyle('SplitStyle', parent=styles['Normal'], fontName=font_name, fontSize=7,
-                                     textColor=colors.black, encoding='utf-8', leading=8)
-    else:
-        table_style = styles['Normal']
-        header_style = styles['Normal']
-        normal_style = styles['Normal']
-        title_style = styles['Heading1']
-        split_style = styles['Normal']
-
-    story = []
-
-    if start_date and end_date:
-        start_date_text = datetime.strftime(datetime.strptime(start_date, "%Y-%m-%d"), "%d.%m.%Y")
-        end_date_text = datetime.strftime(datetime.strptime(end_date, "%Y-%m-%d"), "%d.%m.%Y")
-        dates_text = f" с {start_date_text} по {end_date_text}"
-    else:
-        dates_text = ""
-
-    # Заголовок
-    story.append(Paragraph(f"Отчет по расходам ТСН Сантория{dates_text}", title_style))
-
-    # Подсчет сумм
-    total_debit = sum((op.debit_amount or 0) for op in operations)
-
-    story.append(Paragraph(f"<b>Итого расходов:</b> {total_debit:,.2f} ₽", normal_style))
-    story.append(Spacer(1, 15))
-
-    # Таблица с операциями
-    headers = ['№', 'Дата', 'Сумма', 'Контрагент', 'Назначение', 'Смета', 'Раздел', 'Статья', 'Документ']
-    table_data = [[Paragraph(h, header_style) for h in headers]]
-
-    row_counter = 1
-    for op in operations:
-        amount = op.debit_amount if (op.debit_amount or 0) > 0 else (op.credit_amount or 0)
-        has_splits = op.id in splits_data
-
-        apps = operation_apps.get(op.id, [])
-        if apps:
-            app_text = ', '.join([f'Приложение {app_num}' for app_num in sorted(apps)])
-        else:
-            app_text = '-'
-
-        counterparty_text = (op.counterparty or '-')[:80]
-        purpose_text = (op.purpose or '-')[:200]
-        if len(op.purpose or '') > 200:
-            purpose_text += '...'
-
-        # Основная операция
-        if has_splits:
-            row = [
-                Paragraph(str(row_counter), table_style),
-                Paragraph(op.transaction_date.strftime('%d.%m.%Y') if op.transaction_date else '-', table_style),
-                Paragraph(f"{amount:,.2f}", table_style),
-                Paragraph(counterparty_text, table_style),
-                Paragraph(purpose_text, table_style),
-                Paragraph("", table_style),
-                Paragraph("", table_style),
-                Paragraph("", table_style),
-                Paragraph(app_text, table_style)
-            ]
-        else:
-            row = [
-                Paragraph(str(row_counter), table_style),
-                Paragraph(op.transaction_date.strftime('%d.%m.%Y') if op.transaction_date else '-', table_style),
-                Paragraph(f"{amount:,.2f}", table_style),
-                Paragraph(counterparty_text, table_style),
-                Paragraph(purpose_text, table_style),
-                Paragraph(op.budget.name if op.budget else '-', table_style),
-                Paragraph(op.section.name if op.section else '-', table_style),
-                Paragraph(op.article_ref.name if op.article_ref else '-', table_style),
-                Paragraph(app_text, table_style)
-            ]
-        table_data.append(row)
-        row_counter += 1
-
-        # Добавляем строки с разделениями
-        if has_splits:
-            for split in splits_data[op.id]:
-                split_amount = split.amount or 0
-                split_desc = split.description or '-'
-                split_budget = split.budget.name if split.budget else '-'
-                split_section = split.section.name if split.section else '-'
-                split_article = split.article.name if split.article else '-'
-
-                split_row = [
-                    Paragraph("", table_style),
-                    Paragraph("", table_style),
-                    Paragraph(f"↳ {split_amount:,.2f}", split_style),
-                    Paragraph("", table_style),
-                    Paragraph(f"↳ {split_desc}", split_style),
-                    Paragraph(split_budget, split_style),
-                    Paragraph(split_section, split_style),
-                    Paragraph(split_article, split_style),
-                    Paragraph("", table_style)
-                ]
-                table_data.append(split_row)
-
-    table = Table(table_data, repeatRows=1)
-
-    # Стиль таблицы
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('ALIGN', (3, 1), (3, -1), 'LEFT'),
-        ('ALIGN', (4, 1), (4, -1), 'LEFT'),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('FONTSIZE', (0, 0), (-1, 0), 8),
-        ('FONTSIZE', (0, 1), (-1, -1), 7),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
-        ('TOPPADDING', (0, 1), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 3),
-        ('GRID', (0, 0), (-1, -1), 0.3, colors.black),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-    ]))
-
-    # Пропорциональное распределение ширины колонок
-    col_ratios = [0.4, 0.8, 0.8, 1.5, 3, 0.6, 1.6, 1.2, 1.2]
-    total_ratio = sum(col_ratios)
-    col_widths = [(ratio / total_ratio) * available_width for ratio in col_ratios]
-    table._argW = col_widths
-
-    story.append(table)
-    story.append(PageBreak())
-
-    # ========== Список приложений (только уникальные документы) ==========
-    apps_report_path = None
-    if all_docs:
-        apps_report_path = os.path.join(temp_dir, 'apps_report.pdf')
-        apps_doc = SimpleDocTemplate(apps_report_path, pagesize=A4,
-                                     topMargin=8 * mm, bottomMargin=8 * mm,
-                                     leftMargin=8 * mm, rightMargin=8 * mm)
-
-        apps_page_width, apps_page_height = A4
-        apps_available_width = apps_page_width - (8 * mm * 2)
-
-        apps_story = []
-
-        # Заголовок
-        apps_story.append(Paragraph("Список приложений", title_style))
-        apps_story.append(Spacer(1, 10))
-
-        # Таблица приложений
-        apps_headers = ['№ приложения', 'Наименование']
-        apps_table_data = [[Paragraph(h, header_style) for h in apps_headers]]
-
-        for doc_info in sorted(all_docs, key=lambda x: x['number']):
-            apps_table_data.append([
-                Paragraph(str(doc_info['number']), table_style),
-                Paragraph(doc_info['name'], table_style)
-            ])
-
-        apps_table = Table(apps_table_data, repeatRows=1)
-        apps_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('FONTSIZE', (0, 0), (-1, 0), 8),
-            ('FONTSIZE', (0, 1), (-1, -1), 7),
-            ('TOPPADDING', (0, 1), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 3),
-            ('GRID', (0, 0), (-1, -1), 0.3, colors.black),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-        ]))
-
-        apps_col_widths = [apps_available_width * 0.15, apps_available_width * 0.85]
-        apps_table._argW = apps_col_widths
-
-        apps_story.append(apps_table)
-        apps_doc.build(apps_story)
-
-    # Строим основной PDF
-    doc.build(story)
-
-    # ========== ЧАСТЬ 2: Объединяем с PDF файлами приложений ==========
-    writer = PdfWriter()
-
-    # Добавляем основной отчет
-    with open(report_path, 'rb') as f:
-        reader = PdfReader(f)
-        for page in reader.pages:
-            writer.add_page(page)
-
-    # Добавляем таблицу приложений
-    if apps_report_path and os.path.exists(apps_report_path):
-        with open(apps_report_path, 'rb') as f:
-            reader = PdfReader(f)
-            for page in reader.pages:
-                writer.add_page(page)
-
-    # Добавляем каждый уникальный документ с колонтитулом (один раз)
-    for doc_info in sorted(all_docs, key=lambda x: x['number']):
+    # Создаем контекст приложения для работы с БД
+    with app.app_context():
         try:
-            with open(doc_info['path'], 'rb') as f:
-                doc_reader = PdfReader(f)
-                for page_num, page in enumerate(doc_reader.pages, 1):
-                    page_width = float(page.mediabox.width)
-                    page_height = float(page.mediabox.height)
-                    is_landscape = page_width > page_height
+            task_status[task_id] = {'status': 'processing', 'progress': 0, 'message': 'Начало генерации отчета...'}
 
-                    packet = io.BytesIO()
-                    if is_landscape:
-                        can = canvas.Canvas(packet, pagesize=landscape(A4))
-                        page_size = landscape(A4)
-                    else:
-                        can = canvas.Canvas(packet, pagesize=A4)
-                        page_size = A4
+            # Извлекаем параметры
+            start_date = params.get('start_date')
+            end_date = params.get('end_date')
+            counterparty = params.get('counterparty')
+            transaction_type = params.get('transaction_type')
+            purpose_search = params.get('purpose_search')
+            budget_id = params.get('budget_id')
+            operation_type = params.get('operation_type')
+            has_documents_filter = params.get('has_documents')
 
-                    if has_cyrillic:
-                        can.setFont(font_name, 8)
-                    else:
-                        can.setFont('Helvetica', 8)
+            task_status[task_id]['progress'] = 5
+            task_status[task_id]['message'] = 'Загрузка операций из базы данных...'
 
-                    can.drawString(50, 20, f"Приложение {doc_info['number']} - стр. {page_num}")
-                    can.drawString(50, page_size[1] - 20, f"Приложение {doc_info['number']}")
-                    can.save()
-                    packet.seek(0)
+            # Создаем запрос к базе данных
+            query = Operation.query
 
-                    overlay = PdfReader(packet)
-                    page.merge_page(overlay.pages[0])
-                    writer.add_page(page)
+            if start_date:
+                query = query.filter(Operation.transaction_date >= datetime.strptime(start_date, '%Y-%m-%d'))
+            if end_date:
+                query = query.filter(
+                    Operation.transaction_date <= datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1))
+            if counterparty and counterparty != '':
+                query = query.filter(Operation.counterparty == counterparty)
+            if transaction_type and transaction_type != '':
+                if transaction_type == 'income':
+                    query = query.filter(Operation.credit_amount > 0)
+                elif transaction_type == 'expense':
+                    query = query.filter(Operation.debit_amount > 0)
+            if purpose_search and purpose_search != '':
+                query = query.filter(Operation.purpose.ilike(f'%{purpose_search}%'))
+            if budget_id and budget_id != '':
+                if budget_id == 'null':
+                    query = query.filter(Operation.budget_id.is_(None))
+                else:
+                    query = query.filter(Operation.budget_id == int(budget_id))
+            if operation_type and operation_type != '':
+                if operation_type == 'null':
+                    query = query.filter(Operation.operation_type.is_(None))
+                else:
+                    query = query.filter(Operation.operation_type == operation_type)
+            if has_documents_filter and has_documents_filter != '':
+                if has_documents_filter == 'yes':
+                    query = query.filter(Operation.id.in_(
+                        db.session.query(OperationDocumentLink.operation_id).distinct()
+                    ))
+                elif has_documents_filter == 'no':
+                    query = query.filter(~Operation.id.in_(
+                        db.session.query(OperationDocumentLink.operation_id).distinct()
+                    ))
+
+            operations = query.order_by(Operation.transaction_date).all()
+
+            if not operations:
+                task_status[task_id] = {'status': 'failed', 'progress': 0, 'message': 'Нет операций для отчета',
+                                        'error': 'Нет операций'}
+                return
+
+            task_status[task_id]['progress'] = 15
+            task_status[task_id]['message'] = 'Обработка операций...'
+
+            # Создаем временный файл для основного отчета
+            temp_dir = tempfile.mkdtemp()
+
+            # Собираем все уникальные документы (один документ - один раз)
+            unique_docs = {}
+            operation_apps = {}
+
+            for op in operations:
+                operation_apps[op.id] = []
+                if hasattr(op, 'library_documents'):
+                    for link in op.library_documents:
+                        doc = link.document
+                        actual_file_path = doc.file_path.replace('/root/finance/uploads/',
+                                                                 'C:\\Users\\lahturov.IS_HQ\\PycharmProjects\\TSNFinance\\uploads\\')
+                        if os.path.exists(actual_file_path):
+                            if doc.id not in unique_docs:
+                                unique_docs[doc.id] = {
+                                    'number': len(unique_docs) + 1,
+                                    'path': actual_file_path,
+                                    'name': doc.name,
+                                    'operation_id': op.id,
+                                    'original_filename': doc.original_filename
+                                }
+                            doc_number = unique_docs[doc.id]['number']
+                            if doc_number not in operation_apps[op.id]:
+                                operation_apps[op.id].append(doc_number)
+
+            all_docs = list(unique_docs.values())
+
+            # Загружаем разделения
+            splits_data = {}
+            for op in operations:
+                splits = SplitOperation.query.filter_by(parent_operation_id=op.id).all()
+                if splits:
+                    splits_data[op.id] = splits
+
+            task_status[task_id]['progress'] = 30
+            task_status[task_id]['message'] = 'Формирование PDF...'
+
+            # Регистрируем шрифт для кириллицы
+            font_path = os.path.join(os.path.dirname(app.instance_path), 'fonts', 'DejaVuSans.ttf')
+            if not os.path.exists(font_path):
+                font_path = os.path.join(os.getcwd(), 'fonts', 'DejaVuSans.ttf')
+
+            if os.path.exists(font_path):
+                pdfmetrics.registerFont(TTFont('DejaVuSans', font_path))
+                pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', font_path))
+                has_cyrillic = True
+            else:
+                alt_font_path = 'C:/Windows/Fonts/arial.ttf'
+                if os.path.exists(alt_font_path):
+                    pdfmetrics.registerFont(TTFont('Arial', alt_font_path))
+                    pdfmetrics.registerFont(TTFont('Arial-Bold', alt_font_path))
+                    has_cyrillic = True
+                else:
+                    has_cyrillic = False
+
+            # Создаем основной PDF
+            report_path = os.path.join(temp_dir, 'report.pdf')
+
+            doc = SimpleDocTemplate(report_path, pagesize=landscape(A4),
+                                    topMargin=8 * mm, bottomMargin=8 * mm,
+                                    leftMargin=8 * mm, rightMargin=8 * mm)
+
+            page_width, page_height = landscape(A4)
+            available_width = page_width - (8 * mm * 2)
+            apps_page_width, apps_page_height = A4
+            apps_available_width = apps_page_width - (8 * mm * 2)
+
+            styles = getSampleStyleSheet()
+
+            if has_cyrillic:
+                font_name = 'DejaVuSans' if os.path.exists(font_path) else 'Arial'
+                font_bold = 'DejaVuSans-Bold' if os.path.exists(font_path) else 'Arial-Bold'
+
+                table_style = ParagraphStyle('TableStyle', parent=styles['Normal'], fontName=font_name, fontSize=7,
+                                             encoding='utf-8', leading=9)
+                header_style = ParagraphStyle('HeaderStyle', parent=styles['Normal'], fontName=font_bold, fontSize=8,
+                                              textColor=colors.whitesmoke, alignment=1, encoding='utf-8')
+                normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontName=font_name, fontSize=9,
+                                              encoding='utf-8')
+                title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontName=font_bold, fontSize=14,
+                                             alignment=1, spaceAfter=20, encoding='utf-8')
+                split_style = ParagraphStyle('SplitStyle', parent=styles['Normal'], fontName=font_name, fontSize=7,
+                                             textColor=colors.black, encoding='utf-8', leading=8)
+            else:
+                table_style = styles['Normal']
+                header_style = styles['Normal']
+                normal_style = styles['Normal']
+                title_style = styles['Heading1']
+                split_style = styles['Normal']
+
+            story = []
+
+            # Заголовок
+            if start_date and end_date:
+                start_date_text = datetime.strftime(datetime.strptime(start_date, "%Y-%m-%d"), "%d.%m.%Y")
+                end_date_text = datetime.strftime(datetime.strptime(end_date, "%Y-%m-%d"), "%d.%m.%Y")
+                dates_text = f" с {start_date_text} по {end_date_text}"
+            else:
+                dates_text = ""
+
+            story.append(Paragraph(f"Отчет по расходам ТСН Сантория{dates_text}", title_style))
+
+            total_debit = sum((op.debit_amount or 0) for op in operations)
+            story.append(Paragraph(f"<b>Итого расходов:</b> {total_debit:,.2f} ₽", normal_style))
+            story.append(Spacer(1, 15))
+
+            # Таблица с операциями
+            headers = ['№', 'Дата', 'Сумма', 'Контрагент', 'Назначение', 'Смета', 'Раздел', 'Статья', 'Документ']
+            table_data = [[Paragraph(h, header_style) for h in headers]]
+
+            row_counter = 1
+            for op in operations:
+                amount = op.debit_amount if (op.debit_amount or 0) > 0 else (op.credit_amount or 0)
+                has_splits = op.id in splits_data
+
+                apps = operation_apps.get(op.id, [])
+                app_text = ', '.join([f'Приложение {app_num}' for app_num in sorted(apps)]) if apps else '-'
+
+                counterparty_text = (op.counterparty or '-')[:80]
+                purpose_text = (op.purpose or '-')[:200]
+                if len(op.purpose or '') > 200:
+                    purpose_text += '...'
+
+                if has_splits:
+                    row = [
+                        Paragraph(str(row_counter), table_style),
+                        Paragraph(op.transaction_date.strftime('%d.%m.%Y') if op.transaction_date else '-',
+                                  table_style),
+                        Paragraph(f"{amount:,.2f}", table_style),
+                        Paragraph(counterparty_text, table_style),
+                        Paragraph(purpose_text, table_style),
+                        Paragraph("(разделено)", table_style),
+                        Paragraph("", table_style),
+                        Paragraph("", table_style),
+                        Paragraph(app_text, table_style)
+                    ]
+                else:
+                    row = [
+                        Paragraph(str(row_counter), table_style),
+                        Paragraph(op.transaction_date.strftime('%d.%m.%Y') if op.transaction_date else '-',
+                                  table_style),
+                        Paragraph(f"{amount:,.2f}", table_style),
+                        Paragraph(counterparty_text, table_style),
+                        Paragraph(purpose_text, table_style),
+                        Paragraph(op.budget.name if op.budget else '-', table_style),
+                        Paragraph(op.section.name if op.section else '-', table_style),
+                        Paragraph(op.article_ref.name if op.article_ref else '-', table_style),
+                        Paragraph(app_text, table_style)
+                    ]
+                table_data.append(row)
+                row_counter += 1
+
+                if has_splits:
+                    for split in splits_data[op.id]:
+                        split_amount = split.amount or 0
+                        split_desc = split.description or '-'
+                        split_budget = split.budget.name if split.budget else '-'
+                        split_section = split.section.name if split.section else '-'
+                        split_article = split.article.name if split.article else '-'
+
+                        split_row = [
+                            Paragraph("", table_style),
+                            Paragraph("", table_style),
+                            Paragraph(f"{split_amount:,.2f}", split_style),
+                            Paragraph("", table_style),
+                            Paragraph(f"↳ {split_desc}", split_style),
+                            Paragraph(split_budget, split_style),
+                            Paragraph(split_section, split_style),
+                            Paragraph(split_article, split_style),
+                            Paragraph("", table_style)
+                        ]
+                        table_data.append(split_row)
+
+            table = Table(table_data, repeatRows=1)
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('ALIGN', (3, 1), (3, -1), 'LEFT'),
+                ('ALIGN', (4, 1), (4, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('FONTSIZE', (0, 0), (-1, 0), 8),
+                ('FONTSIZE', (0, 1), (-1, -1), 7),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+                ('TOPPADDING', (0, 1), (-1, -1), 3),
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 3),
+                ('GRID', (0, 0), (-1, -1), 0.3, colors.black),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ]))
+
+            col_ratios = [0.4, 0.8, 0.8, 1.5, 3, 0.6, 1.6, 1.2, 1.2]
+            total_ratio = sum(col_ratios)
+            col_widths = [(ratio / total_ratio) * available_width for ratio in col_ratios]
+            table._argW = col_widths
+            story.append(table)
+            story.append(PageBreak())
+
+            # Список приложений
+            apps_report_path = None
+            if all_docs:
+                task_status[task_id]['progress'] = 60
+                task_status[task_id]['message'] = 'Формирование списка приложений...'
+
+                apps_report_path = os.path.join(temp_dir, 'apps_report.pdf')
+                apps_doc = SimpleDocTemplate(apps_report_path, pagesize=A4,
+                                             topMargin=8 * mm, bottomMargin=8 * mm,
+                                             leftMargin=8 * mm, rightMargin=8 * mm)
+
+                apps_story = []
+                apps_story.append(Paragraph("Список приложений", title_style))
+                apps_story.append(Spacer(1, 10))
+
+                apps_headers = ['№ приложения', 'Наименование']
+                apps_table_data = [[Paragraph(h, header_style) for h in apps_headers]]
+                for doc_info in sorted(all_docs, key=lambda x: x['number']):
+                    apps_table_data.append([
+                        Paragraph(str(doc_info['number']), table_style),
+                        Paragraph(doc_info['name'], table_style)
+                    ])
+
+                apps_table = Table(apps_table_data, repeatRows=1)
+                apps_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 8),
+                    ('FONTSIZE', (0, 1), (-1, -1), 7),
+                    ('TOPPADDING', (0, 1), (-1, -1), 3),
+                    ('BOTTOMPADDING', (0, 1), (-1, -1), 3),
+                    ('GRID', (0, 0), (-1, -1), 0.3, colors.black),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                ]))
+
+                apps_col_widths = [apps_available_width * 0.15, apps_available_width * 0.85]
+                apps_table._argW = apps_col_widths
+                apps_story.append(apps_table)
+                apps_doc.build(apps_story)
+
+            # Строим основной PDF
+            doc.build(story)
+
+            task_status[task_id]['progress'] = 30
+            task_status[task_id]['message'] = 'Объединение PDF файлов...'
+
+            temp_pdfs = []
+
+            # Сохраняем основной отчет во временный файл
+            temp_main = os.path.join(temp_dir, 'temp_main.pdf')
+            with open(report_path, 'rb') as f:
+                with open(temp_main, 'wb') as out:
+                    out.write(f.read())
+            temp_pdfs.append(temp_main)
+
+            docs_count = len(all_docs)
+            docs_added = 0
+
+            # Для каждого документа создаем новый PDF с колонтитулами
+            for doc_info in sorted(all_docs, key=lambda x: x['number']):
+                try:
+                    # Открываем оригинальный PDF
+                    doc = fitz.open(doc_info['path'])
+
+                    # Создаем новый PDF для результата
+                    temp_doc_path = os.path.join(temp_dir, f'temp_doc_{doc_info["number"]}.pdf')
+                    new_doc = fitz.open()
+
+                    for page_num, page in enumerate(doc, 1):
+                        # Создаем новый лист такого же размера
+                        new_page = new_doc.new_page(width=page.rect.width, height=page.rect.height)
+
+                        # Вставляем содержимое оригинальной страницы
+                        new_page.show_pdf_page(new_page.rect, doc, page_num - 1)
+
+                        # Добавляем колонтитулы
+                        font_name_pymupdf = "hebo"  # helv для латиницы, hebo для кириллицы
+
+                        # Верхний колонтитул
+                        new_page.insert_text(
+                            (50, new_page.rect.height - 30),
+                            f"Приложение {doc_info['number']}",
+                            fontsize=8,
+                            fontname=font_name,
+                            fontfile=font_path
+                        )
+                        # Нижний колонтитул
+                        new_page.insert_text(
+                            (50, 20),
+                            f"Приложение {doc_info['number']} - стр. {page_num}",
+                            fontsize=8,
+                            fontname=font_name,
+                            fontfile=font_path
+                        )
+
+                    new_doc.save(temp_doc_path)
+                    new_doc.close()
+                    doc.close()
+                    temp_pdfs.append(temp_doc_path)
+
+                    docs_added += 1
+
+                    task_status[task_id]['progress'] = int(30 + 30 * (docs_added / docs_count))
+                    task_status[task_id]['message'] = 'Объединение PDF файлов...'
+
+                except Exception as e:
+                    print(f"Error processing document {doc_info['number']}: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+            task_status[task_id]['progress'] = 60
+            task_status[task_id]['message'] = 'Объединение PDF файлов...'
+            docs_added = 0
+
+            # Объединяем все PDF
+            final_path = os.path.join(temp_dir, 'final_report.pdf')
+            final_doc = fitz.open()
+
+            for pdf_path in temp_pdfs:
+                try:
+                    src_doc = fitz.open(pdf_path)
+                    final_doc.insert_pdf(src_doc)
+                    src_doc.close()
+                    docs_added += 1
+
+                    task_status[task_id]['progress'] = int(60 + 40 * (docs_added / docs_count))
+                    task_status[task_id]['message'] = 'Объединение PDF файлов...'
+                except Exception as e:
+                    print(f"Error merging {pdf_path}: {e}")
+
+            final_doc.save(final_path)
+            final_doc.close()
+
+            # Очищаем временные PDF файлы
+            for pdf_path in temp_pdfs:
+                try:
+                    os.remove(pdf_path)
+                except:
+                    pass
+
+            task_status[task_id] = {
+                'status': 'completed',
+                'progress': 100,
+                'message': 'Готово',
+                'file_path': final_path,
+                'filename': f"отчет_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            }
+
         except Exception as e:
-            print(f"Error adding document {doc_info['number']}: {e}")
+            import traceback
+            traceback.print_exc()
+            task_status[task_id] = {
+                'status': 'failed',
+                'progress': 0,
+                'message': str(e),
+                'error': str(e)
+            }
 
-    # Сохраняем итоговый файл
-    final_path = os.path.join(temp_dir, 'final_report.pdf')
-    with open(final_path, 'wb') as f:
-        writer.write(f)
+@app.route('/api/generate_report_async', methods=['POST'])
+def generate_report_async_endpoint():
+    """Запуск асинхронной генерации отчета"""
+    # Получаем параметры из запроса
+    params = request.get_json()
 
-    return send_file(final_path, as_attachment=True,
-                     download_name=f"отчет_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                     mimetype='application/pdf')
+    # Генерируем уникальный ID задачи
+    task_id = str(uuid.uuid4())
+
+    # Запускаем генерацию в отдельном потоке
+    thread = threading.Thread(target=generate_report_async, args=(task_id, params))
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({'task_id': task_id, 'status': 'started'})
+
+
+@app.route('/api/report_status/<task_id>')
+def get_report_status(task_id):
+    """Получение статуса генерации отчета"""
+    status = task_status.get(task_id, {'status': 'not_found'})
+
+    # Если отчет готов, возвращаем URL для скачивания
+    if status.get('status') == 'completed':
+        # Сохраняем файл с постоянным именем
+        filename = status.get('filename')
+        file_path = status.get('file_path')
+
+        # Отдаем временный URL для скачивания
+        return jsonify({
+            'status': 'completed',
+            'progress': 100,
+            'message': status.get('message'),
+            'download_url': f'/api/download_report/{task_id}'
+        })
+
+    return jsonify(status)
+
+
+@app.route('/api/download_report/<task_id>')
+def download_report(task_id):
+    """Скачивание готового отчета"""
+    status = task_status.get(task_id)
+    if not status or status.get('status') != 'completed':
+        return jsonify({'error': 'Report not ready'}), 404
+
+    file_path = status.get('file_path')
+    filename = status.get('filename')
+    print(file_path)
+
+    if not os.path.exists(file_path):
+        return jsonify({'error': 'File not found'}), 404
+    print('returning file')
+    return send_file(file_path, as_attachment=True, download_name=filename)
+
+
+@app.route('/api/cleanup_report/<task_id>')
+def cleanup_report(task_id):
+    """Очистка временных файлов отчета"""
+    status = task_status.get(task_id)
+    if status and status.get('file_path'):
+        try:
+            # Удаляем временную папку с файлами
+            temp_dir = os.path.dirname(status['file_path'])
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception as e:
+            print(f"Cleanup error: {e}")
+
+    if task_id in task_status:
+        del task_status[task_id]
+
+    return jsonify({'success': True})
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

@@ -2881,76 +2881,169 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-    // Генерация отчета с текущими фильтрами
+// Генерация отчета с текущими фильтрами (асинхронно)
+let currentReportTaskId = null;
+let reportPollingInterval = null;
+
 async function generateReport() {
     // Собираем текущие фильтры
-    const params = new URLSearchParams();
+    const params = {
+        start_date: document.getElementById('filterStartDate')?.value || null,
+        end_date: document.getElementById('filterEndDate')?.value || null,
+        counterparty: document.getElementById('filterCounterparty')?.value || null,
+        transaction_type: document.getElementById('filterTransactionType')?.value || null,
+        purpose_search: document.getElementById('filterPurpose')?.value || null,
+        budget_id: document.getElementById('filterBudget')?.value || null,
+        operation_type: document.getElementById('filterOperationType')?.value || null,
+        has_documents: document.getElementById('filterHasDocuments')?.value || null
+    };
 
-    let startDate = document.getElementById('filterStartDate')?.value || '';
-    let endDate = document.getElementById('filterEndDate')?.value || '';
-    const counterparty = document.getElementById('filterCounterparty')?.value || '';
-    const transactionType = document.getElementById('filterTransactionType')?.value || '';
-    const purposeSearch = document.getElementById('filterPurpose')?.value || '';
-    const budgetId = document.getElementById('filterBudget')?.value || '';
-    const operationType = document.getElementById('filterOperationType')?.value || '';
-    const hasDocuments = document.getElementById('filterHasDocuments')?.value || '';
-
-    if (startDate) params.append('start_date', startDate);
-    if (endDate) params.append('end_date', endDate);
-    if (counterparty && counterparty !== '') params.append('counterparty', counterparty);
-    if (transactionType && transactionType !== '') params.append('transaction_type', transactionType);
-    if (purposeSearch && purposeSearch !== '') params.append('purpose_search', purposeSearch);
-    if (budgetId && budgetId !== '') {
-        if (budgetId === 'null') {
-            params.append('budget_id', 'null');
-        } else {
-            params.append('budget_id', budgetId);
+    // Преобразуем даты
+    if (params.start_date) {
+        const parts = params.start_date.split('.');
+        if (parts.length === 3) {
+            params.start_date = `${parts[2]}-${parts[1]}-${parts[0]}`;
         }
     }
-    if (operationType && operationType !== '') {
-        if (operationType === 'null') {
-            params.append('operation_type', 'null');
-        } else {
-            params.append('operation_type', operationType);
+    if (params.end_date) {
+        const parts = params.end_date.split('.');
+        if (parts.length === 3) {
+            params.end_date = `${parts[2]}-${parts[1]}-${parts[0]}`;
         }
-    }
-    if (hasDocuments && hasDocuments !== '') {
-        params.append('has_documents', hasDocuments);
     }
 
     // Показываем индикатор загрузки
-    const reportBtn = event.target;
+    const reportBtn = document.querySelector('button[onclick="generateReport()"]');
     const originalText = reportBtn.textContent;
-    reportBtn.textContent = '⏳ Формирование...';
+    reportBtn.textContent = '⏳ Запуск...';
     reportBtn.disabled = true;
 
+    // Создаем модальное окно для прогресса
+    const progressModal = document.createElement('div');
+    progressModal.id = 'reportProgressModal';
+    progressModal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 10000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    `;
+    progressModal.innerHTML = `
+        <div style="background: white; border-radius: 10px; padding: 30px; min-width: 350px; text-align: center;">
+            <h3>📄 Формирование отчета</h3>
+            <div style="margin: 20px 0;">
+                <div style="background: #e0e0e0; border-radius: 10px; overflow: hidden;">
+                    <div id="progressBar" style="width: 0%; height: 20px; background: #28a745; transition: width 0.3s;"></div>
+                </div>
+                <p id="progressMessage" style="margin-top: 10px; color: #666;">Подготовка...</p>
+            </div>
+            <button onclick="cancelReportGeneration()" style="background: #dc3545;">Отменить</button>
+        </div>
+    `;
+    document.body.appendChild(progressModal);
+
     try {
-        const response = await fetch('/api/generate_operations_report?' + params.toString());
+        // Запускаем асинхронную генерацию
+        const response = await fetch('/api/generate_report_async', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(params)
+        });
 
-        if (!response.ok) {
-            throw new Error('Ошибка при формировании отчета');
-        }
+        const result = await response.json();
+        currentReportTaskId = result.task_id;
 
-        // Получаем blob с PDF
-        const blob = await response.blob();
+        // Начинаем опрос статуса
+        if (reportPollingInterval) clearInterval(reportPollingInterval);
 
-        // Создаем ссылку для скачивания
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `отчет_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+        reportPollingInterval = setInterval(async () => {
+            await checkReportStatus(currentReportTaskId);
+        }, 2000);
 
     } catch (error) {
-        console.error('Error generating report:', error);
-        alert('Ошибка при формировании отчета: ' + error.message);
+        console.error('Error starting report generation:', error);
+        alert('Ошибка при запуске формирования отчета');
+        closeProgressModal();
     } finally {
         reportBtn.textContent = originalText;
         reportBtn.disabled = false;
     }
+}
+
+async function checkReportStatus(taskId) {
+    try {
+        const response = await fetch(`/api/report_status/${taskId}`);
+        const status = await response.json();
+
+        const progressBar = document.getElementById('progressBar');
+        const progressMessage = document.getElementById('progressMessage');
+
+        if (progressBar) {
+            progressBar.style.width = `${status.progress || 0}%`;
+        }
+        if (progressMessage) {
+            progressMessage.textContent = status.message || 'Обработка...';
+        }
+
+        if (status.status === 'completed') {
+            // Отчет готов
+            clearInterval(reportPollingInterval);
+            reportPollingInterval = null;
+
+            progressMessage.textContent = 'Скачивание файла...';
+
+            // Важно: используем прямую ссылку, а не fetch + blob
+            // Это решит проблему с большими файлами
+            const downloadUrl = status.download_url;
+            if (downloadUrl) {
+                // Создаем временную ссылку и имитируем клик
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = status.filename || `отчет_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
+
+            // Очищаем временные файлы на сервере (асинхронно, не дожидаемся)
+            setTimeout(() => fetch(`/api/cleanup_report/${taskId}`), 10000);
+
+            // Закрываем модальное окно через 2 секунды
+            setTimeout(() => closeProgressModal(), 2000);
+
+        } else if (status.status === 'failed') {
+            clearInterval(reportPollingInterval);
+            reportPollingInterval = null;
+            alert(`Ошибка: ${status.error || status.message}`);
+            closeProgressModal();
+        }
+
+    } catch (error) {
+        console.error('Error checking report status:', error);
+    }
+}
+
+function cancelReportGeneration() {
+    if (reportPollingInterval) {
+        clearInterval(reportPollingInterval);
+        reportPollingInterval = null;
+    }
+    if (currentReportTaskId) {
+        fetch(`/api/cleanup_report/${currentReportTaskId}`);
+        currentReportTaskId = null;
+    }
+    closeProgressModal();
+    alert('Формирование отчета отменено');
+}
+
+function closeProgressModal() {
+    const modal = document.getElementById('reportProgressModal');
+    if (modal) modal.remove();
 }
 </script>
 
