@@ -3,7 +3,8 @@ import pandas as pd
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
-from models import db, Budget, BudgetSection, BudgetArticle, Operation, Document, StatementImport, SplitOperation, DocumentLibrary, OperationDocumentLink
+from models import db, Budget, BudgetSection, BudgetArticle, Operation, Document, StatementImport, SplitOperation, \
+    DocumentLibrary, OperationDocumentLink
 import threading
 import uuid
 from datetime import timedelta
@@ -31,6 +32,7 @@ ALLOWED_EXTENSIONS = {'txt'}
 
 task_status = {}
 
+
 # Или используйте простую функцию без транслитерации
 def generate_safe_filename(original_filename):
     """Генерация безопасного имени файла с сохранением расширения"""
@@ -45,6 +47,7 @@ def generate_safe_filename(original_filename):
     if ext:
         return f"{unique_name}.{ext}"
     return unique_name
+
 
 # Или с транслитерацией (если установлен пакет transliterate)
 def generate_safe_filename_translit(original_filename):
@@ -72,10 +75,13 @@ def generate_safe_filename_translit(original_filename):
         return f"{safe_name}_{unique_suffix}.{ext}"
     return f"{safe_name}_{unique_suffix}"
 
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+
 db.init_app(app)
+
 
 def generate_unique_hash(row, statement_filename):
     """Генерация уникального хэша для операции"""
@@ -173,6 +179,7 @@ def parse_sber_statement(filepath, filename):
         return operations
     except Exception as e:
         raise Exception(f"Ошибка парсинга файла: {str(e)}")
+
 
 @app.route('/')
 def index():
@@ -422,6 +429,7 @@ def check_duplicate_operation(operation_data):
 
     return False, None
 
+
 @app.route('/update_operation/<int:operation_id>', methods=['POST'])
 def update_operation(operation_id):
     operation = Operation.query.get_or_404(operation_id)
@@ -493,7 +501,6 @@ def delete_document(document_id):
     return redirect(url_for('operation_detail', operation_id=operation_id))
 
 
-
 @app.route('/generate_report_with_files', methods=['POST'])
 def generate_report_with_files():
     from reportlab.lib import colors
@@ -547,7 +554,8 @@ def generate_report_with_files():
     for idx, op in enumerate(operations, 1):
         amount = op.debit_amount if (op.debit_amount or 0) > 0 else (op.credit_amount or 0)
         attachments = op.documents
-        attachment_text = ', '.join([f"Приложение {doc.attachment_number}" for doc in attachments]) if attachments else '-'
+        attachment_text = ', '.join(
+            [f"Приложение {doc.attachment_number}" for doc in attachments]) if attachments else '-'
 
         table_data.append([
             str(idx),
@@ -673,7 +681,8 @@ def generate_report():
 
         # Получаем приложения
         attachments = op.documents
-        attachment_text = ', '.join([f"Приложение {doc.attachment_number}" for doc in attachments]) if attachments else '-'
+        attachment_text = ', '.join(
+            [f"Приложение {doc.attachment_number}" for doc in attachments]) if attachments else '-'
 
         # Ограничиваем длину назначения
         purpose_text = (op.purpose or '-')
@@ -713,7 +722,8 @@ def generate_report():
     for op in operations:
         for doc in op.documents:
             if doc.filename and os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], doc.filename)):
-                all_docs.append((doc.attachment_number, os.path.join(app.config['UPLOAD_FOLDER'], doc.filename), doc.original_filename, op))
+                all_docs.append((doc.attachment_number, os.path.join(app.config['UPLOAD_FOLDER'], doc.filename),
+                                 doc.original_filename, op))
 
     if all_docs:
         story.append(PageBreak())
@@ -750,6 +760,7 @@ def generate_report():
         as_attachment=True,
         download_name=f"отчет_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
     )
+
 
 @app.route('/api/statistics')
 def statistics():
@@ -1025,7 +1036,7 @@ def update_operation_api(operation_id):
 @app.route('/api/operations/<int:operation_id>/splits', methods=['GET'])
 def get_splits(operation_id):
     """Получить все разделения для операции"""
-    splits = SplitOperation.query.filter_by(parent_operation_id=operation_id).all()
+    splits = SplitOperation.query.filter_by(parent_operation_id=operation_id).order_by(SplitOperation.id.desc()).all()
     return jsonify([s.to_dict() for s in splits])
 
 
@@ -1045,7 +1056,7 @@ def add_split(operation_id):
 
     if current_total + amount > original_amount + 0.01:  # Добавляем небольшую погрешность
         return jsonify({
-                           'error': f'Сумма разделений ({current_total + amount:.2f}) превышает исходную сумму ({original_amount:.2f})'}), 400
+            'error': f'Сумма разделений ({current_total + amount:.2f}) превышает исходную сумму ({original_amount:.2f})'}), 400
 
     split = SplitOperation(
         parent_operation_id=operation_id,
@@ -1082,7 +1093,7 @@ def update_split(split_id):
 
         if other_total + new_amount > original_amount + 0.01:
             return jsonify({
-                               'error': f'Сумма разделений ({other_total + new_amount:.2f}) превышает исходную сумму ({original_amount:.2f})'}), 400
+                'error': f'Сумма разделений ({other_total + new_amount:.2f}) превышает исходную сумму ({original_amount:.2f})'}), 400
         split.amount = new_amount
 
     if 'description' in data:
@@ -1127,48 +1138,12 @@ def delete_split(split_id):
     return jsonify({'success': True, 'remaining': remaining})
 
 
-@app.route('/api/operations/<int:operation_id>/splits/auto_distribute', methods=['POST'])
-def auto_distribute_splits(operation_id):
-    """Автоматическое распределение суммы по выбранным статьям"""
-    operation = Operation.query.get_or_404(operation_id)
-    data = request.get_json()
-
-    articles = data.get('articles', [])  # список {article_id, percent}
-    original_amount = operation.debit_amount if operation.debit_amount > 0 else operation.credit_amount
-
-    # Удаляем существующие разделения
-    SplitOperation.query.filter_by(parent_operation_id=operation_id).delete()
-
-    # Создаем новые
-    total_percent = sum(a['percent'] for a in articles)
-    if abs(total_percent - 100) > 0.01:
-        return jsonify({'error': f'Сумма процентов ({total_percent}%) не равна 100%'}), 400
-
-    for article_data in articles:
-        amount = original_amount * article_data['percent'] / 100
-        if amount > 0:
-            split = SplitOperation(
-                parent_operation_id=operation_id,
-                amount=round(amount, 2),
-                description=f"Автоматическое распределение ({article_data['percent']}%)",
-                article_id=article_data['article_id']
-            )
-            # Получаем section_id и budget_id из статьи
-            article = BudgetArticle.query.get(article_data['article_id'])
-            if article:
-                split.section_id = article.section_id
-                split.budget_id = article.section.budget_id
-            db.session.add(split)
-
-    operation.is_split = True
-    db.session.commit()
-
-    return jsonify({'success': True})
 
 @app.route('/api/budgets')
 def api_budgets():
     budgets = Budget.query.filter_by(is_active=True).all()
     return jsonify([b.to_dict() for b in budgets])
+
 
 @app.route('/api/budgets/<int:budget_id>/sections')
 def api_budget_sections(budget_id):
@@ -1225,6 +1200,7 @@ def upload_operation_document(operation_id):
 
     return jsonify({'success': True, 'document_id': document.id})
 
+
 @app.route('/api/documents/<int:document_id>/view')
 def view_document(document_id):
     """Просмотр документа"""
@@ -1251,8 +1227,6 @@ def delete_document_api(document_id):
 def documents_library():
     """Страница библиотеки документов"""
     return render_template('documents_library.html')
-
-
 
 
 @app.route('/api/documents_library/<int:document_id>', methods=['PUT'])
@@ -1481,6 +1455,7 @@ def upload_direct_document(operation_id):
 
     return jsonify({'success': True, 'document_id': document.id})
 
+
 @app.route('/api/documents_library', methods=['GET'])
 def api_get_documents_library():
     """Получить все документы из библиотеки"""
@@ -1499,6 +1474,7 @@ def api_get_documents_library():
     except Exception as e:
         print(f"Error in api_get_documents_library: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/documents_library', methods=['POST'])
 def api_upload_document():
@@ -1544,32 +1520,21 @@ def api_upload_document():
 
     return jsonify({'success': True, 'document_id': document.id})
 
+
 # Регистрируем шрифт с поддержкой кириллицы
-def register_russian_font():
+def get_font_path():
     """Регистрация шрифта с поддержкой кириллицы"""
     font_path = os.path.join(os.path.dirname(__file__), 'fonts', 'DejaVuSans.ttf')
     if os.path.exists(font_path):
-        pdfmetrics.registerFont(TTFont('DejaVuSans', font_path))
-        pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', font_path))
-        return True
+        return font_path
     else:
-        # Если шрифт не найден, используем стандартный (латиница только)
-        print(f"Warning: Font file not found at {font_path}")
-        return False
+        font_path = os.path.join(os.path.dirname(__file__).parent, 'fonts', 'DejaVuSans.ttf')
+        if os.path.exists(font_path):
+            return font_path
+        else:
+            print(f"Warning: Font file not found at {font_path}")
+            return False
 
-# Вызываем регистрацию при старте
-HAS_RUSSIAN_FONT = register_russian_font()
-
-def get_russian_style(base_style, font_name='DejaVuSans', size=10):
-    """Создание стиля с поддержкой кириллицы"""
-    if HAS_RUSSIAN_FONT:
-        return ParagraphStyle(
-            base_style,
-            fontName=font_name,
-            fontSize=size,
-            encoding='utf-8'
-        )
-    return base_style
 
 def generate_report_async(task_id, params):
     """Асинхронная генерация отчета (с контекстом приложения)"""
@@ -1688,22 +1653,12 @@ def generate_report_async(task_id, params):
             task_status[task_id]['message'] = 'Формирование PDF...'
 
             # Регистрируем шрифт для кириллицы
-            font_path = os.path.join(os.path.dirname(app.instance_path), 'fonts', 'DejaVuSans.ttf')
-            if not os.path.exists(font_path):
-                font_path = os.path.join(os.getcwd(), 'fonts', 'DejaVuSans.ttf')
+            font_path = get_font_path()
+            font_name = 'DejaVuSans'
+            font_bold = 'DejaVuSans-Bold'
 
-            if os.path.exists(font_path):
-                pdfmetrics.registerFont(TTFont('DejaVuSans', font_path))
-                pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', font_path))
-                has_cyrillic = True
-            else:
-                alt_font_path = 'C:/Windows/Fonts/arial.ttf'
-                if os.path.exists(alt_font_path):
-                    pdfmetrics.registerFont(TTFont('Arial', alt_font_path))
-                    pdfmetrics.registerFont(TTFont('Arial-Bold', alt_font_path))
-                    has_cyrillic = True
-                else:
-                    has_cyrillic = False
+            pdfmetrics.registerFont(TTFont('DejaVuSans', font_path))
+            pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', font_path))
 
             # Создаем основной PDF
             report_path = os.path.join(temp_dir, 'report.pdf')
@@ -1719,26 +1674,17 @@ def generate_report_async(task_id, params):
 
             styles = getSampleStyleSheet()
 
-            if has_cyrillic:
-                font_name = 'DejaVuSans' if os.path.exists(font_path) else 'Arial'
-                font_bold = 'DejaVuSans-Bold' if os.path.exists(font_path) else 'Arial-Bold'
+            table_style = ParagraphStyle('TableStyle', parent=styles['Normal'], fontName=font_name, fontSize=7,
+                                         encoding='utf-8', leading=9)
+            header_style = ParagraphStyle('HeaderStyle', parent=styles['Normal'], fontName=font_bold, fontSize=8,
+                                          textColor=colors.whitesmoke, alignment=1, encoding='utf-8')
+            normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontName=font_name, fontSize=9,
+                                          encoding='utf-8')
+            title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontName=font_bold, fontSize=14,
+                                         alignment=1, spaceAfter=20, encoding='utf-8')
+            split_style = ParagraphStyle('SplitStyle', parent=styles['Normal'], fontName=font_name, fontSize=7,
+                                         textColor=colors.black, encoding='utf-8', leading=8)
 
-                table_style = ParagraphStyle('TableStyle', parent=styles['Normal'], fontName=font_name, fontSize=7,
-                                             encoding='utf-8', leading=9)
-                header_style = ParagraphStyle('HeaderStyle', parent=styles['Normal'], fontName=font_bold, fontSize=8,
-                                              textColor=colors.whitesmoke, alignment=1, encoding='utf-8')
-                normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontName=font_name, fontSize=9,
-                                              encoding='utf-8')
-                title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontName=font_bold, fontSize=14,
-                                             alignment=1, spaceAfter=20, encoding='utf-8')
-                split_style = ParagraphStyle('SplitStyle', parent=styles['Normal'], fontName=font_name, fontSize=7,
-                                             textColor=colors.black, encoding='utf-8', leading=8)
-            else:
-                table_style = styles['Normal']
-                header_style = styles['Normal']
-                normal_style = styles['Normal']
-                title_style = styles['Heading1']
-                split_style = styles['Normal']
 
             story = []
 
@@ -2003,6 +1949,7 @@ def generate_report_async(task_id, params):
                 'error': str(e)
             }
 
+
 @app.route('/api/generate_report_async', methods=['POST'])
 def generate_report_async_endpoint():
     """Запуск асинхронной генерации отчета"""
@@ -2077,13 +2024,14 @@ def cleanup_report(task_id):
 
     return jsonify({'success': True})
 
+
 @app.route('/debug/environment')
 def debug_environment():
     import os
     import pwd
     import grp
     PROJECT_ROOT = '555'
-    
+
     return jsonify({
         'current_user': pwd.getpwuid(os.getuid()).pw_name,
         'current_group': grp.getgrgid(os.getgid()).gr_name,
@@ -2091,9 +2039,11 @@ def debug_environment():
         'db_path': app.config['SQLALCHEMY_DATABASE_URI'],
         'db_exists': os.path.exists(os.path.join(PROJECT_ROOT, 'bank_statement.db')),
         'upload_folder': app.config['UPLOAD_FOLDER'],
-        'upload_writable': os.access(app.config['UPLOAD_FOLDER'], os.W_OK) if os.path.exists(app.config['UPLOAD_FOLDER']) else False,
+        'upload_writable': os.access(app.config['UPLOAD_FOLDER'], os.W_OK) if os.path.exists(
+            app.config['UPLOAD_FOLDER']) else False,
         'cwd': os.getcwd()
     })
+
 
 def init_database():
     """Инициализация базы данных и создание всех таблиц"""
@@ -2102,9 +2052,8 @@ def init_database():
         db.create_all()
         print("Таблицы созданы")
         db_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
-        print( f"База данных находится по пути: {os.path.abspath(db_path)}")
+        print(f"База данных находится по пути: {os.path.abspath(db_path)}")
 
-        
         # Проверяем, есть ли данные в справочниках
         if Budget.query.count() == 0:
             print("Создаю начальные данные...")
@@ -2117,7 +2066,7 @@ def init_database():
             )
             db.session.add(default_budget)
             db.session.commit()
-            
+
             # Создаем разделы
             sections = [
                 ('01', 'Административные расходы', 'Расходы на управление'),
@@ -2125,7 +2074,7 @@ def init_database():
                 ('03', 'Ремонт и обслуживание', 'Ремонтные работы'),
                 ('04', 'Связь и IT', 'Интернет и телефония'),
             ]
-            
+
             for code, name, desc in sections:
                 section = BudgetSection(
                     budget_id=default_budget.id,
@@ -2135,7 +2084,7 @@ def init_database():
                 )
                 db.session.add(section)
                 db.session.commit()
-                
+
                 # Статьи для каждого раздела
                 if code == '01':
                     articles = [('001', 'Заработная плата'), ('002', 'Бухгалтерия'), ('003', 'Налоги')]
@@ -2147,7 +2096,7 @@ def init_database():
                     articles = [('001', 'Интернет'), ('002', 'Телефония'), ('003', 'Хостинг')]
                 else:
                     articles = []
-                
+
                 for art_code, art_name in articles:
                     article = BudgetArticle(
                         section_id=section.id,
@@ -2156,8 +2105,9 @@ def init_database():
                     )
                     db.session.add(article)
                 db.session.commit()
-            
+
             print("Начальные данные созданы")
+
 
 if __name__ == '__main__':
     init_database()

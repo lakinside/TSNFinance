@@ -302,7 +302,6 @@ document.getElementById('uploadDocumentForm').addEventListener('submit', async (
         if (result.success) {
             document.getElementById('uploadDocumentForm').reset();
             await loadDocuments();
-            alert('Документ загружен');
         } else {
             alert(result.error);
         }

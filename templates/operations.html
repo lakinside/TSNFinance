@@ -633,18 +633,6 @@
     </div>
 </div>
 
-<!-- Модальное окно для автоматического распределения -->
-<div id="autoDistributeModal" class="modal">
-    <div class="modal-content">
-        <h3>Автоматическое распределение суммы</h3>
-        <div id="autoDistributeArticles"></div>
-        <div style="margin-top: 20px;">
-            <button onclick="applyAutoDistribute()" class="btn-success">Применить</button>
-            <button onclick="closeModal()" style="background: #6c757d;">Отмена</button>
-        </div>
-    </div>
-</div>
-
 <script>
 // Глобальные переменные
 let budgetsData = {};
@@ -653,7 +641,6 @@ let articlesData = {};
 let splitEditorState = {};
 let operationsData = [];
 let currentSplitOperationId = null;
-let autoDistributeArticlesList = [];
 
 // Загрузка смет при загрузке страницы
 {% for b in budgets %}
@@ -1010,7 +997,6 @@ async function renderSplitRows(operationId, splits) {
                 Распределено: ${splitsTotal.toFixed(2)} ₽ |
                 Остаток: <span class="${remaining >= 0 ? 'split-remaining' : 'split-over'}">${remaining.toFixed(2)} ₽</span>
                 <button onclick="addSplit(${operationId})" class="btn-split" style="margin-left: 10px;">+ Добавить строку</button>
-                <button onclick="openAutoDistribute(${operationId}, ${originalAmount})" class="btn-split">⚡ Автораспределение</button>
             </div>
          </td>
     `;
@@ -1509,139 +1495,6 @@ async function loadArticlesForSelect(sectionId, selectElement, currentArticleId)
     }
 }
 
-// Открыть модальное окно для автоматического распределения
-function openAutoDistribute(operationId, amount) {
-    currentSplitOperationId = operationId;
-    const modal = document.getElementById('autoDistributeModal');
-    const container = document.getElementById('autoDistributeArticles');
-
-    container.innerHTML = `
-        <div class="split-item">
-            <label>Выберите статьи и укажите процент распределения (сумма должна быть 100%):</label>
-        </div>
-        <div id="articlesList"></div>
-        <button onclick="addArticleRowForAutoDistribute()" style="margin-top: 10px;">+ Добавить статью</button>
-    `;
-
-    autoDistributeArticlesList = [];
-    addArticleRowForAutoDistribute();
-
-    modal.style.display = 'flex';
-}
-
-function addArticleRowForAutoDistribute() {
-    const container = document.getElementById('articlesList');
-    const index = autoDistributeArticlesList.length;
-    const row = document.createElement('div');
-    row.className = 'split-item';
-    row.id = `article_row_${index}`;
-    row.innerHTML = `
-        <select class="article-select" id="article_${index}" style="width: 60%;">
-            <option value="">-- Выберите статью --</option>
-        </select>
-        <input type="number" class="split-amount-input" id="percent_${index}" placeholder="%" step="0.1" style="width: 80px;">
-        <button onclick="removeArticleRowForAutoDistribute(${index})" class="btn-danger" style="padding: 2px 8px;">×</button>
-    `;
-    container.appendChild(row);
-
-    loadArticlesForSelectAutoDistribute(`article_${index}`);
-
-    autoDistributeArticlesList.push({ id: index, article_id: null, percent: 0 });
-}
-
-function removeArticleRowForAutoDistribute(index) {
-    const row = document.getElementById(`article_row_${index}`);
-    if (row) row.remove();
-    autoDistributeArticlesList = autoDistributeArticlesList.filter(a => a.id !== index);
-}
-
-async function loadArticlesForSelectAutoDistribute(selectId) {
-    const select = document.getElementById(selectId);
-
-    try {
-        const response = await fetch('/api/budgets');
-        const budgets = await response.json();
-
-        for (const budget of budgets) {
-            const group = document.createElement('optgroup');
-            group.label = budget.name;
-
-            const sectionsResp = await fetch(`/api/budgets/${budget.id}/sections`);
-            const sections = await sectionsResp.json();
-
-            for (const section of sections) {
-                const articlesResp = await fetch(`/api/sections/${section.id}/articles`);
-                const articles = await articlesResp.json();
-
-                for (const article of articles) {
-                    const option = document.createElement('option');
-                    option.value = article.id;
-                    option.textContent = `${section.code}.${article.code} - ${article.name}`;
-                    group.appendChild(option);
-                }
-            }
-            select.appendChild(group);
-        }
-
-        const idx = parseInt(selectId.split('_')[1]);
-        select.onchange = (e) => {
-            const item = autoDistributeArticlesList.find(a => a.id === idx);
-            if (item) item.article_id = e.target.value;
-        };
-
-        const percentInput = document.getElementById(`percent_${idx}`);
-        percentInput.onchange = (e) => {
-            const item = autoDistributeArticlesList.find(a => a.id === idx);
-            if (item) item.percent = parseFloat(e.target.value) || 0;
-        };
-    } catch (error) {
-        console.error('Error loading articles:', error);
-    }
-}
-
-async function applyAutoDistribute() {
-    const articles = [];
-    let totalPercent = 0;
-
-    for (const item of autoDistributeArticlesList) {
-        if (item.article_id && item.percent > 0) {
-            articles.push({ article_id: parseInt(item.article_id), percent: item.percent });
-            totalPercent += item.percent;
-        }
-    }
-
-    if (Math.abs(totalPercent - 100) > 0.01) {
-        alert(`Сумма процентов должна быть равна 100% (сейчас ${totalPercent}%)`);
-        return;
-    }
-
-    try {
-        const response = await fetch(`/api/operations/${currentSplitOperationId}/splits/auto_distribute`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ articles: articles })
-        });
-
-        const result = await response.json();
-        if (result.error) {
-            alert(result.error);
-        } else {
-            closeModal();
-            await loadSplitsForOperation(currentSplitOperationId);
-            await loadOperations();
-        }
-    } catch (error) {
-        console.error('Error auto distributing:', error);
-        alert('Ошибка при автоматическом распределении');
-    }
-}
-
-function closeModal() {
-    document.getElementById('autoDistributeModal').style.display = 'none';
-    currentSplitOperationId = null;
-}
-
-
 
 // Загрузка при загрузке страницы
 document.addEventListener('DOMContentLoaded', () => {
@@ -1934,7 +1787,6 @@ async function uploadDocument() {
             fileInput.value = '';
             await loadDocumentsList(currentDocumentsOperationId);
             await loadOperations(); // Обновляем таблицу для обновления иконки
-            alert('Документ успешно загружен');
         } else {
             alert(result.error || 'Ошибка загрузки');
         }
@@ -1962,7 +1814,6 @@ async function deleteDocument(documentId, operationId) {
         if (result.success) {
             await loadDocumentsList(operationId);
             await loadOperations(); // Обновляем таблицу для обновления иконки
-            alert('Документ удален');
         } else {
             alert(result.error || 'Ошибка удаления');
         }
@@ -2293,8 +2144,6 @@ async function applyBatchUpdate() {
             }
         }
 
-        alert(`✅ Обновлено ${successCount} из ${operationIds.length} операций`);
-
         // Очищаем выбор и перезагружаем данные
         selectedOperations.clear();
         updateSelectedCount();
@@ -2538,7 +2387,6 @@ async function detachDocument(operationId, documentId) {
             await loadAttachedDocuments(operationId);
             await loadAvailableDocuments();
             await loadOperations(); // Обновляем таблицу
-            alert('Документ откреплен');
         } else {
             alert(result.error);
         }
@@ -2581,7 +2429,6 @@ async function uploadDirectDocument() {
             fileInput.value = '';
             await loadAttachedDocuments(currentDocumentsOperationId);
             await loadOperations(); // Обновляем таблицу для обновления иконки
-            alert('Документ успешно прикреплен к операции');
         } else {
             alert(result.error || 'Ошибка загрузки');
         }
@@ -2619,7 +2466,6 @@ async function uploadNewDocument() {
             fileInput.value = '';
             nameInput.value = '';
             await loadAvailableDocuments();
-            alert('Документ загружен в библиотеку');
         } else {
             alert(result.error);
         }
@@ -2642,7 +2488,6 @@ async function attachDocument(operationId, documentId) {
             await loadAttachedDocuments(operationId);
             await loadAvailableDocuments();
             await loadOperations();
-            alert('Документ прикреплен');
         } else {
             alert(result.error);
         }
@@ -2841,7 +2686,6 @@ async function uploadDirectDocument() {
             await loadAttachedDocuments(currentDocumentsOperationId);
             await loadAvailableDocuments();
             await loadOperations();
-            alert('Документ успешно прикреплен к операции');
         } else {
             alert(result.error || 'Ошибка загрузки');
         }
