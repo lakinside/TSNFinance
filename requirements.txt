@@ -6,3 +6,4 @@ reportlab
 PyPDF2
 Werkzeug
 python-dotenv
+fitz

@@ -1,4 +1,3 @@
-import os
 import hashlib
 import pandas as pd
 from datetime import datetime
@@ -7,27 +6,15 @@ from flask import Flask, render_template, request, redirect, url_for, flash, sen
 from models import db, Budget, BudgetSection, BudgetArticle, Operation, Document, StatementImport, SplitOperation, DocumentLibrary, OperationDocumentLink
 import threading
 import uuid
-from transliterate import translit
 from datetime import timedelta
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 import os
 
-import io
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import mm, cm
-from reportlab.pdfgen import canvas
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-import PyPDF2
-from PyPDF2 import PdfReader, PdfWriter
+
 
 task_status = {}
-
-import sys
 
 # Или используйте простую функцию без транслитерации
 def generate_safe_filename(original_filename):
@@ -43,7 +30,6 @@ def generate_safe_filename(original_filename):
     if ext:
         return f"{unique_name}.{ext}"
     return unique_name
-
 
 # Или с транслитерацией (если установлен пакет transliterate)
 def generate_safe_filename_translit(original_filename):
@@ -1597,10 +1583,7 @@ def generate_report_async(task_id, params):
     from reportlab.pdfbase.ttfonts import TTFont
     import tempfile
     import os
-    import io
-    from PyPDF2 import PdfReader, PdfWriter
     import fitz
-    import shutil
 
     # Создаем контекст приложения для работы с БД
     with app.app_context():
@@ -1867,7 +1850,6 @@ def generate_report_async(task_id, params):
             story.append(PageBreak())
 
             # Список приложений
-            apps_report_path = None
             if all_docs:
                 task_status[task_id]['progress'] = 60
                 task_status[task_id]['message'] = 'Формирование списка приложений...'
@@ -1942,9 +1924,6 @@ def generate_report_async(task_id, params):
 
                         # Вставляем содержимое оригинальной страницы
                         new_page.show_pdf_page(new_page.rect, doc, page_num - 1)
-
-                        # Добавляем колонтитулы
-                        font_name_pymupdf = "hebo"  # helv для латиницы, hebo для кириллицы
 
                         # Верхний колонтитул
                         new_page.insert_text(
