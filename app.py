@@ -12,7 +12,22 @@ import os
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from config import Config
 
+# Инициализация конфигурации
+Config.init_directories()
+
+# Создание приложения
+app = Flask(__name__)
+app.config.from_object(Config)
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{Config.get_db_path()}'
+app.config['UPLOAD_FOLDER'] = str(Config.UPLOADS_DIR)
+app.config['REPORT_FOLDER'] = str(Config.REPORTS_DIR)
+
+# Создание необходимых папок
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs(app.config['REPORT_FOLDER'], exist_ok=True)
+ALLOWED_EXTENSIONS = {'txt'}
 
 task_status = {}
 
@@ -56,20 +71,6 @@ def generate_safe_filename_translit(original_filename):
     if ext:
         return f"{safe_name}_{unique_suffix}.{ext}"
     return f"{safe_name}_{unique_suffix}"
-
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-change-this'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///bank_statement.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['REPORT_FOLDER'] = 'reports'
-app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
-app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max
-
-# Создание необходимых папок
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(app.config['REPORT_FOLDER'], exist_ok=True)
-ALLOWED_EXTENSIONS = {'xlsx', 'xls', 'txt'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -291,7 +292,7 @@ def upload_statement():
         return redirect(url_for('statements'))
 
     if not allowed_file(file.filename):
-        flash('Поддерживаются только файлы Excel (.xlsx, .xls) и текстовые файлы (.txt) формата 1С', 'error')
+        flash('Поддерживаются только текстовые файлы (.txt) формата 1С', 'error')
         return redirect(url_for('statements'))
 
     filename = secure_filename(file.filename)
@@ -482,8 +483,8 @@ def delete_document(document_id):
     operation_id = document.operation_id
 
     # Удаляем файл
-    if os.path.exists(document.file_path):
-        os.remove(document.file_path)
+    if os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], document.filename)):
+        os.remove(os.path.join(app.config['UPLOAD_FOLDER'], document.filename))
 
     db.session.delete(document)
     db.session.commit()
@@ -569,16 +570,16 @@ def generate_report_with_files():
     story.append(table)
 
     # Добавляем список приложений
-    all_docs = [(doc.attachment_number, doc.file_path, doc.original_filename, op)
+    all_docs = [(doc.attachment_number, doc.filename, doc.original_filename, op)
                 for op in operations for doc in op.documents
-                if doc.file_path and os.path.exists(doc.file_path)]
+                if doc.filename and os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], doc.filename))]
 
     if all_docs:
         story.append(PageBreak())
         story.append(Paragraph("Приложения", title_style))
         story.append(Spacer(1, 20))
 
-        for attach_num, file_path, orig_name, op in all_docs:
+        for attach_num, orig_name, op in all_docs:
             story.append(Paragraph(f"<b>Приложение {attach_num}:</b> {orig_name}", styles['Normal']))
             story.append(Paragraph(f"Операция: {(op.purpose or '-')[:100]}", styles['Normal']))
             story.append(Spacer(1, 10))
@@ -711,8 +712,8 @@ def generate_report():
     all_docs = []
     for op in operations:
         for doc in op.documents:
-            if doc.file_path and os.path.exists(doc.file_path):
-                all_docs.append((doc.attachment_number, doc.file_path, doc.original_filename, op))
+            if doc.filename and os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], doc.filename)):
+                all_docs.append((doc.attachment_number, os.path.join(app.config['UPLOAD_FOLDER'], doc.filename), doc.original_filename, op))
 
     if all_docs:
         story.append(PageBreak())
@@ -722,7 +723,7 @@ def generate_report():
         # Сортируем по номеру приложения
         all_docs.sort(key=lambda x: x[0] or 0)
 
-        for attach_num, file_path, orig_name, op in all_docs:
+        for attach_num, orig_name, op in all_docs:
             story.append(Paragraph(f"<b>Приложение {attach_num}:</b> {orig_name}", styles['Normal']))
             story.append(Paragraph(
                 f"Операция от {op.transaction_date.strftime('%d.%m.%Y') if op.transaction_date else '-'}: {(op.purpose or '-')[:100]}",
@@ -1228,9 +1229,8 @@ def upload_operation_document(operation_id):
 def view_document(document_id):
     """Просмотр документа"""
     document = Document.query.get_or_404(document_id)
-    actual_file_path = doc.file_path.replace('/root/finance/uploads/',
-                                             'C:\\Users\\lahturov.IS_HQ\\PycharmProjects\\TSNFinance\\uploads\\')
-    return send_file(actual_file_path, as_attachment=False)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], document.filename)
+    return send_file(file_path, as_attachment=False)
 
 
 @app.route('/api/documents/<int:document_id>', methods=['DELETE'])
@@ -1238,8 +1238,8 @@ def delete_document_api(document_id):
     """Удалить документ"""
     document = Document.query.get_or_404(document_id)
 
-    if os.path.exists(document.file_path):
-        os.remove(document.file_path)
+    if os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], document.filename)):
+        os.remove(os.path.join(app.config['UPLOAD_FOLDER'], document.filename))
 
     db.session.delete(document)
     db.session.commit()
@@ -1282,8 +1282,8 @@ def api_delete_document(document_id):
         return jsonify(
             {'error': f'Документ прикреплен к {document.usage_count} операциям. Сначала открепите его.'}), 400
 
-    if os.path.exists(document.file_path):
-        os.remove(document.file_path)
+    if os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], document.filename)):
+        os.remove(os.path.join(app.config['UPLOAD_FOLDER'], document.filename))
 
     db.session.delete(document)
     db.session.commit()
@@ -1295,9 +1295,8 @@ def api_delete_document(document_id):
 def api_view_document(document_id):
     """Просмотр документа из библиотеки"""
     document = DocumentLibrary.query.get_or_404(document_id)
-    actual_file_path = document.file_path.replace('/root/finance/uploads/',
-                                             'C:\\Users\\lahturov.IS_HQ\\PycharmProjects\\TSNFinance\\uploads\\')
-    return send_file(actual_file_path, as_attachment=False)
+
+    return send_file(os.path.join(app.config['UPLOAD_FOLDER'], document.filename), as_attachment=False)
 
 
 # ========== Прикрепление документов к операциям ==========
@@ -1662,8 +1661,7 @@ def generate_report_async(task_id, params):
                 if hasattr(op, 'library_documents'):
                     for link in op.library_documents:
                         doc = link.document
-                        actual_file_path = doc.file_path.replace('/root/finance/uploads/',
-                                                                 'C:\\Users\\lahturov.IS_HQ\\PycharmProjects\\TSNFinance\\uploads\\')
+                        actual_file_path = os.path.join(app.config['UPLOAD_FOLDER'], doc.filename)
                         if os.path.exists(actual_file_path):
                             if doc.id not in unique_docs:
                                 unique_docs[doc.id] = {
@@ -1752,7 +1750,7 @@ def generate_report_async(task_id, params):
             else:
                 dates_text = ""
 
-            story.append(Paragraph(f"Отчет по расходам ТСН Сантория{dates_text}", title_style))
+            story.append(Paragraph(f"Отчет по расходам {Config.TSN_COMPANY_NAME}{dates_text}", title_style))
 
             total_debit = sum((op.debit_amount or 0) for op in operations)
             story.append(Paragraph(f"<b>Итого расходов:</b> {total_debit:,.2f} ₽", normal_style))
@@ -2079,5 +2077,88 @@ def cleanup_report(task_id):
 
     return jsonify({'success': True})
 
+@app.route('/debug/environment')
+def debug_environment():
+    import os
+    import pwd
+    import grp
+    PROJECT_ROOT = '555'
+    
+    return jsonify({
+        'current_user': pwd.getpwuid(os.getuid()).pw_name,
+        'current_group': grp.getgrgid(os.getgid()).gr_name,
+        'project_root': PROJECT_ROOT,
+        'db_path': app.config['SQLALCHEMY_DATABASE_URI'],
+        'db_exists': os.path.exists(os.path.join(PROJECT_ROOT, 'bank_statement.db')),
+        'upload_folder': app.config['UPLOAD_FOLDER'],
+        'upload_writable': os.access(app.config['UPLOAD_FOLDER'], os.W_OK) if os.path.exists(app.config['UPLOAD_FOLDER']) else False,
+        'cwd': os.getcwd()
+    })
+
+def init_database():
+    """Инициализация базы данных и создание всех таблиц"""
+    with app.app_context():
+        # Создаем все таблицы
+        db.create_all()
+        print("Таблицы созданы")
+        db_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
+        print( f"База данных находится по пути: {os.path.abspath(db_path)}")
+
+        
+        # Проверяем, есть ли данные в справочниках
+        if Budget.query.count() == 0:
+            print("Создаю начальные данные...")
+            # Создаем тестовую смету
+            default_budget = Budget(
+                name="Основная смета",
+                year=datetime.now().year,
+                description="Основная смета",
+                is_active=True
+            )
+            db.session.add(default_budget)
+            db.session.commit()
+            
+            # Создаем разделы
+            sections = [
+                ('01', 'Административные расходы', 'Расходы на управление'),
+                ('02', 'Коммунальные услуги', 'Оплата ЖКХ'),
+                ('03', 'Ремонт и обслуживание', 'Ремонтные работы'),
+                ('04', 'Связь и IT', 'Интернет и телефония'),
+            ]
+            
+            for code, name, desc in sections:
+                section = BudgetSection(
+                    budget_id=default_budget.id,
+                    code=code,
+                    name=name,
+                    description=desc
+                )
+                db.session.add(section)
+                db.session.commit()
+                
+                # Статьи для каждого раздела
+                if code == '01':
+                    articles = [('001', 'Заработная плата'), ('002', 'Бухгалтерия'), ('003', 'Налоги')]
+                elif code == '02':
+                    articles = [('001', 'Электроэнергия'), ('002', 'Водоснабжение'), ('003', 'Отопление')]
+                elif code == '03':
+                    articles = [('001', 'Текущий ремонт'), ('002', 'Снегоуборка'), ('003', 'Уборка')]
+                elif code == '04':
+                    articles = [('001', 'Интернет'), ('002', 'Телефония'), ('003', 'Хостинг')]
+                else:
+                    articles = []
+                
+                for art_code, art_name in articles:
+                    article = BudgetArticle(
+                        section_id=section.id,
+                        code=art_code,
+                        name=art_name
+                    )
+                    db.session.add(article)
+                db.session.commit()
+            
+            print("Начальные данные созданы")
+
 if __name__ == '__main__':
+    init_database()
     app.run(debug=True, host='0.0.0.0', port=5000)

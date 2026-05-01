@@ -1,9 +1,25 @@
-Flask
-Flask-SQLAlchemy
-pandas
-openpyxl
-reportlab
-PyPDF2
-Werkzeug
-python-dotenv
-fitz
+# Основные фреймворки
+Flask>=2.3.3
+Flask-SQLAlchemy>=3.0.5
+
+# Работа с Excel файлами
+pandas>=2.0.3
+openpyxl>=3.1.2
+
+# Генерация PDF
+reportlab>=4.0.4
+PyPDF2>=3.0.1
+PyMuPDF>=1.23.8
+
+# Работа с файлами и путями
+Werkzeug>=2.3.7
+
+# Дополнительные утилиты
+python-dotenv>=1.0.0
+transliterate>=1.10.2
+
+# Для работы с изображениями (опционально, для PDF)
+pillow>=10.0.0
+
+# Для конвертации PDF (опционально)
+pdf2image>=1.16.3
