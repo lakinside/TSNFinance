@@ -44,4 +44,4 @@ class Config:
     SECRET_KEY = 'your-secret-key-change-this'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     MAX_CONTENT_LENGTH = 3500 * 1024 * 1024
-    TSN_COMPANY_NAME = 'ТСН «Сантория»'
+    TSN_COMPANY_NAME = 'ТСН'
